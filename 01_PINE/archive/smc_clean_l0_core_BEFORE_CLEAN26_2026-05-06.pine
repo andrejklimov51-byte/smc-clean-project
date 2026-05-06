@@ -714,9 +714,7 @@ var label primLbl705 = na
 var label primLbl79  = na
 var label primLbl100 = na
 
-bool primVisActive = (primaryState == PRIMARY_LOCKED or primaryState == PRIMARY_BROKEN) and not na(drawFib0)
-
-if primVisActive
+if primaryState == PRIMARY_LOCKED and not na(fib0)
     line.delete(primLine0)
     line.delete(primLine50)
     line.delete(primLine705)
@@ -728,19 +726,19 @@ if primVisActive
     label.delete(primLbl705)
     label.delete(primLbl79)
     label.delete(primLbl100)
-    primLine0   := line.new(bar_index-1, drawFib0,   bar_index, drawFib0,   extend=extend.right, color=color.gray,                  width=1, style=line.style_solid)
-    primLine50  := line.new(bar_index-1, drawFib50,  bar_index, drawFib50,  extend=extend.right, color=color.new(color.blue, 40),   width=1, style=line.style_dashed)
-    primLine705 := line.new(bar_index-1, drawFib705, bar_index, drawFib705, extend=extend.right, color=color.new(color.orange, 30), width=1, style=line.style_dashed)
-    primLine79  := line.new(bar_index-1, drawFib79,  bar_index, drawFib79,  extend=extend.right, color=color.new(color.red, 20),    width=1, style=line.style_dashed)
-    primLine100 := line.new(bar_index-1, drawFib100, bar_index, drawFib100, extend=extend.right, color=color.gray,                  width=1, style=line.style_solid)
+    primLine0   := line.new(bar_index-1, fib0,   bar_index, fib0,   extend=extend.right, color=color.gray,                  width=1, style=line.style_solid)
+    primLine50  := line.new(bar_index-1, fib50,  bar_index, fib50,  extend=extend.right, color=color.new(color.blue, 40),   width=1, style=line.style_dashed)
+    primLine705 := line.new(bar_index-1, fib705, bar_index, fib705, extend=extend.right, color=color.new(color.orange, 30), width=1, style=line.style_dashed)
+    primLine79  := line.new(bar_index-1, fib79,  bar_index, fib79,  extend=extend.right, color=color.new(color.red, 20),    width=1, style=line.style_dashed)
+    primLine100 := line.new(bar_index-1, fib100, bar_index, fib100, extend=extend.right, color=color.gray,                  width=1, style=line.style_solid)
     int baseBar = na(primOwnerStartBar) ? bar_index - 50 : primOwnerStartBar
     int termBar = na(primOwnerTermBar)  ? bar_index - 10 : primOwnerTermBar
-    primArrow   := line.new(baseBar, drawFib0, termBar, drawFib100, color=color.new(color.blue, 20), width=2, style=line.style_arrow_right)
-    primLbl0   := label.new(bar_index, drawFib0,   primaryLabel + " 0",        style=label.style_label_left, color=color.new(color.gray, 70),   textcolor=color.white, size=size.tiny)
-    primLbl50  := label.new(bar_index, drawFib50,  primaryLabel + " 0.5",      style=label.style_label_left, color=color.new(color.blue, 60),   textcolor=color.white, size=size.tiny)
-    primLbl705 := label.new(bar_index, drawFib705, primaryLabel + " 0.705",    style=label.style_label_left, color=color.new(color.orange, 50), textcolor=color.white, size=size.tiny)
-    primLbl79  := label.new(bar_index, drawFib79,  primaryLabel + " 0.79 OTE", style=label.style_label_left, color=color.new(color.red, 40),    textcolor=color.white, size=size.tiny)
-    primLbl100 := label.new(bar_index, drawFib100, primaryLabel + " 1",        style=label.style_label_left, color=color.new(color.gray, 70),   textcolor=color.white, size=size.tiny)
+    primArrow   := line.new(baseBar, fib0, termBar, fib100, color=color.new(color.blue, 20), width=2, style=line.style_arrow_right)
+    primLbl0   := label.new(bar_index, fib0,   primaryLabel + " 0",        style=label.style_label_left, color=color.new(color.gray, 70),   textcolor=color.white, size=size.tiny)
+    primLbl50  := label.new(bar_index, fib50,  primaryLabel + " 0.5",      style=label.style_label_left, color=color.new(color.blue, 60),   textcolor=color.white, size=size.tiny)
+    primLbl705 := label.new(bar_index, fib705, primaryLabel + " 0.705",    style=label.style_label_left, color=color.new(color.orange, 50), textcolor=color.white, size=size.tiny)
+    primLbl79  := label.new(bar_index, fib79,  primaryLabel + " 0.79 OTE", style=label.style_label_left, color=color.new(color.red, 40),    textcolor=color.white, size=size.tiny)
+    primLbl100 := label.new(bar_index, fib100, primaryLabel + " 1",        style=label.style_label_left, color=color.new(color.gray, 70),   textcolor=color.white, size=size.tiny)
 
 // OTE зона
 bgcolor(priceInOte ? color.new(color.green, 92) : na, title="OTE зона")
