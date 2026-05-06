@@ -755,8 +755,6 @@ label.delete(proofLabel)
 string proofText =
      "ПРОФИЛЬ: " + selectedProfile + "\n" +
      "POI: "     + poiLabel     + " | " + poiState     + "\n" +
-     "poiHi: " + str.tostring(poiHi, "#.##") + "\n" +
-     "poiLo: " + str.tostring(poiLo, "#.##") + "\n" +
      "PRIMARY: " + primaryLabel + " | " + primaryState + "\n" +
      "CONFIRM: " + confirmLabel + "\n" +
      "OTE: "     + (priceInOte ? "ДА" : "НЕТ") + "\n" +
