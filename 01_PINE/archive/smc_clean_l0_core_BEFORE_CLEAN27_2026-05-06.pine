@@ -759,8 +759,6 @@ string proofText =
      "CONFIRM: " + confirmLabel + "\n" +
      "OTE: "     + (priceInOte ? "ДА" : "НЕТ") + "\n" +
      "ВЛАДЕЛЕЦ: " + ownerState + "\n" +
-     "startBar: " + str.tostring(primOwnerStartBar) + "\n" +
-     "termBar: "  + str.tostring(primOwnerTermBar)  + "\n" +
      "rawB: "    + str.tostring(poiRawBase,     "#.##") + "\n" +
      "rawT: "    + str.tostring(poiRawTerminal, "#.##") + "\n" +
      "rawDir: "  + str.tostring(poiRawDir) + "\n" +
