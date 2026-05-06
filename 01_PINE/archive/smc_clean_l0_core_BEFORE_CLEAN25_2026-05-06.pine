@@ -95,8 +95,6 @@ var float primCompletedHigh  = na
 var int   primCompletedDir   = 0
 var float primCompletedRange = na
 var bool  primCompletedNow   = false
-var int   primPendStartBar   = na
-var int   primPendTermBar    = na
 
 primCompletedNow := false
 
@@ -176,6 +174,8 @@ var float primPendLow      = na
 var float primPendHigh     = na
 var int   primPendDir      = 0
 var float primPendRange    = na
+var int   primPendStartBar = na
+var int   primPendTermBar  = na
 var bool  primOwnerConfirmed = false
 var float primOwnerLow  = na
 var float primOwnerHigh = na
