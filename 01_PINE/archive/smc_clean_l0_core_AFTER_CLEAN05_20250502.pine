@@ -1,0 +1,155 @@
+//@version=6
+indicator("SMC Clean Core L0", overlay=true, max_labels_count=50, max_lines_count=50)
+
+// PROFILE ENGINE
+string PROFILE_A        = "A"
+string PROFILE_B        = "B"
+string selectedProfile  = PROFILE_A
+string poiTf            = selectedProfile == PROFILE_A ? "240"  : "1440"
+string primaryTf        = selectedProfile == PROFILE_A ? "60"   : "240"
+string confirmTf        = selectedProfile == PROFILE_A ? "15"   : "60"
+string poiLabel         = selectedProfile == PROFILE_A ? "4H"   : "1D"
+string primaryLabel     = selectedProfile == PROFILE_A ? "1H"   : "4H"
+string confirmLabel     = selectedProfile == PROFILE_A ? "15m"  : "1H"
+
+// ============================================================
+// RAW MTF SOURCE ENGINE
+// ============================================================
+
+poiOpen  = request.security(syminfo.tickerid, poiTf, open,  lookahead=barmerge.lookahead_off)
+poiHigh  = request.security(syminfo.tickerid, poiTf, high,  lookahead=barmerge.lookahead_off)
+poiLow   = request.security(syminfo.tickerid, poiTf, low,   lookahead=barmerge.lookahead_off)
+poiClose = request.security(syminfo.tickerid, poiTf, close, lookahead=barmerge.lookahead_off)
+primOpen  = request.security(syminfo.tickerid, primaryTf, open,  lookahead=barmerge.lookahead_off)
+primHigh  = request.security(syminfo.tickerid, primaryTf, high,  lookahead=barmerge.lookahead_off)
+primLow   = request.security(syminfo.tickerid, primaryTf, low,   lookahead=barmerge.lookahead_off)
+primClose = request.security(syminfo.tickerid, primaryTf, close, lookahead=barmerge.lookahead_off)
+confOpen  = request.security(syminfo.tickerid, confirmTf, open,  lookahead=barmerge.lookahead_off)
+confHigh  = request.security(syminfo.tickerid, confirmTf, high,  lookahead=barmerge.lookahead_off)
+confLow   = request.security(syminfo.tickerid, confirmTf, low,   lookahead=barmerge.lookahead_off)
+confClose = request.security(syminfo.tickerid, confirmTf, close, lookahead=barmerge.lookahead_off)
+
+// ============================================================
+// IMPULSE OBJECT ENGINE — PRIMARY TF
+// ============================================================
+
+const int pivotLen = 5
+float primPivHigh = request.security(syminfo.tickerid, primaryTf, ta.pivothigh(high, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float primPivLow  = request.security(syminfo.tickerid, primaryTf, ta.pivotlow(low,  pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+bool primNewPivHigh = not na(primPivHigh)
+bool primNewPivLow  = not na(primPivLow)
+var float primLegBasePrice = na
+var float primLegTermPrice = na
+var int   primLegDir       = 0
+var bool  primLegExists    = false
+if primNewPivLow
+    primLegBasePrice := primPivLow
+    primLegDir       := 1
+    primLegExists    := true
+if primNewPivHigh
+    primLegBasePrice := primPivHigh
+    primLegDir       := -1
+    primLegExists    := true
+var float primLegTerminal = na
+if primLegDir == 1 and primNewPivHigh
+    primLegTerminal := primPivHigh
+if primLegDir == -1 and primNewPivLow
+    primLegTerminal := primPivLow
+float primLegRange = primLegExists and not na(primLegTerminal) ? math.abs(primLegTerminal - primLegBasePrice) : na
+float primAtr = request.security(syminfo.tickerid, primaryTf, ta.atr(14), lookahead=barmerge.lookahead_off)
+bool  primLegAboveAtr = not na(primLegRange) and primLegRange > primAtr
+var float primRetrace = na
+if primLegExists and not na(primLegTerminal) and not na(primLegBasePrice)
+    primRetrace := primLegDir == 1 ? (primLegTerminal - close) / primLegRange :
+                                     (close - primLegTerminal) / primLegRange
+bool primLegConfirmed = not na(primRetrace) and primRetrace >= 0.5 and primLegAboveAtr
+
+// ============================================================
+// IMPULSE LIFECYCLE ENGINE
+// ============================================================
+
+var string ownerState = "OWNER_NONE"
+var float  curImpBase      = na
+var float  curImpTerminal  = na
+var int    curImpDir       = 0
+var float  curImpRange     = na
+var bool   curImpConfirmed = false
+var float  prevImpBase     = na
+var float  prevImpTerminal = na
+var int    prevImpDir      = 0
+var float  prevImpRange    = na
+var float  pendImpBase      = na
+var float  pendImpTerminal  = na
+var int    pendImpDir       = 0
+var float  pendImpRange     = na
+var bool   pendImpConfirmed = false
+const float DOMINANCE_FACTOR = 0.75
+
+if primLegExists and not na(primLegTerminal) and not na(primLegRange)
+    pendImpBase      := primLegBasePrice
+    pendImpTerminal  := primLegTerminal
+    pendImpDir       := primLegDir
+    pendImpRange     := primLegRange
+    pendImpConfirmed := primLegConfirmed
+
+bool takeoverAllowed = pendImpConfirmed and not na(pendImpRange) and
+     (na(curImpRange) or pendImpRange > curImpRange * DOMINANCE_FACTOR)
+
+if takeoverAllowed
+    prevImpBase     := curImpBase
+    prevImpTerminal := curImpTerminal
+    prevImpDir      := curImpDir
+    prevImpRange    := curImpRange
+    curImpBase      := pendImpBase
+    curImpTerminal  := pendImpTerminal
+    curImpDir       := pendImpDir
+    curImpRange     := pendImpRange
+    curImpConfirmed := true
+    ownerState      := "OWNER_CURRENT"
+
+if not curImpConfirmed
+    ownerState := "OWNER_NONE"
+
+// ============================================================
+// BOUNDARY EVENT ENGINE
+// ============================================================
+
+string TAKE_HIGH    = "TAKE_HIGH"
+string TAKE_LOW     = "TAKE_LOW"
+string INSIDE_RANGE = "INSIDE_RANGE"
+string NO_EVENT     = "NO_EVENT"
+var string boundaryEvent = "NO_EVENT"
+
+bool prevExists = not na(prevImpBase) and not na(prevImpTerminal)
+bool curExists  = not na(curImpBase)  and not na(curImpTerminal)
+
+if prevExists and curExists
+    float prevHi = math.max(prevImpBase, prevImpTerminal)
+    float prevLo = math.min(prevImpBase, prevImpTerminal)
+    float curHi  = math.max(curImpBase,  curImpTerminal)
+    float curLo  = math.min(curImpBase,  curImpTerminal)
+    if curHi > prevHi
+        boundaryEvent := TAKE_HIGH
+    else if curLo < prevLo
+        boundaryEvent := TAKE_LOW
+    else if curHi <= prevHi and curLo >= prevLo
+        boundaryEvent := INSIDE_RANGE
+    else
+        boundaryEvent := NO_EVENT
+else
+    boundaryEvent := NO_EVENT
+
+var string structureEvent = "NONE"
+if boundaryEvent == TAKE_HIGH
+    structureEvent := curImpDir == 1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if boundaryEvent == TAKE_LOW
+    structureEvent := curImpDir == -1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if boundaryEvent == INSIDE_RANGE
+    structureEvent := "INTERNAL"
+else
+    structureEvent := "NONE"
+
+// PROOF LABEL
+var label proofLabel = na
+
+// Next stage: CLEAN-06 POI Context Engine

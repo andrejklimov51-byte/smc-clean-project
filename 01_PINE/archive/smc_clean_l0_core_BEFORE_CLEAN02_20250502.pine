@@ -1,0 +1,51 @@
+//@version=6
+indicator("SMC Clean Core L0", overlay=true, max_labels_count=50, max_lines_count=50)
+
+// PROFILE ENGINE
+string PROFILE_A        = "A"
+string PROFILE_B        = "B"
+string selectedProfile  = PROFILE_A
+string poiTf            = selectedProfile == PROFILE_A ? "240"  : "1440"
+string primaryTf        = selectedProfile == PROFILE_A ? "60"   : "240"
+string confirmTf        = selectedProfile == PROFILE_A ? "15"   : "60"
+string poiLabel         = selectedProfile == PROFILE_A ? "4H"   : "1D"
+string primaryLabel     = selectedProfile == PROFILE_A ? "1H"   : "4H"
+string confirmLabel     = selectedProfile == PROFILE_A ? "15m"  : "1H"
+
+// IMPULSE OBJECT — current
+var bool  impCurExists    = false
+var int   impCurDir       = 0
+var int   impCurStartBar  = na
+var int   impCurEndBar    = na
+var float impCurHi        = na
+var float impCurLo        = na
+var float impCurRange     = na
+var bool  impCurConfirmed = false
+
+// IMPULSE OBJECT — previous
+var bool  impPrevExists   = false
+var int   impPrevDir      = 0
+var int   impPrevStartBar = na
+var int   impPrevEndBar   = na
+var float impPrevHi       = na
+var float impPrevLo       = na
+var float impPrevRange    = na
+
+// IMPULSE OBJECT — pending (next candidate for ownership)
+var bool  impPendExists   = false
+var int   impPendDir      = 0
+var int   impPendStartBar = na
+var int   impPendEndBar   = na
+var float impPendHi       = na
+var float impPendLo       = na
+var float impPendRange    = na
+
+// OWNER STATE
+// OWNER_NONE / OWNER_CURRENT / OWNER_PREVIOUS / OWNER_PREVIOUS_AFTER_ROLLBACK
+var string ownerState = "OWNER_NONE"
+
+// PROOF LABEL
+var label proofLabel = na
+
+// GATE: compiles, no logic yet, no legacy
+// Next stage: CLEAN-02 Raw MTF Source Engine

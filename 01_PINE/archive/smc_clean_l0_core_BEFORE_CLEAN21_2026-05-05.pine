@@ -1,0 +1,678 @@
+//@version=6
+indicator("SMC Clean Core L0", overlay=true, max_labels_count=50, max_lines_count=50)
+
+// ============================================================
+// PROFILE ENGINE — AUTO по display TF
+// Profile A: display 1H/15m → POI=4H, PRIMARY=1H, CONFIRM=15m
+// Profile B: display 4H+    → POI=1D, PRIMARY=4H, CONFIRM=1H
+// ============================================================
+const string PROFILE_A = "A"
+const string PROFILE_B = "B"
+
+// CLEAN-19 ЧАСТЬ 1: auto-profile по timeframe.period
+string selectedProfile = timeframe.period == "15" or
+     timeframe.period == "60" ? PROFILE_A : PROFILE_B
+
+string poiTf      = selectedProfile == PROFILE_A ? "240"  : "1440"
+string primaryTf  = selectedProfile == PROFILE_A ? "60"   : "240"
+string confirmTf  = selectedProfile == PROFILE_A ? "15"   : "60"
+string poiLabel   = selectedProfile == PROFILE_A ? "4H"   : "1D"
+string primaryLabel = selectedProfile == PROFILE_A ? "1H"  : "4H"
+string confirmLabel = selectedProfile == PROFILE_A ? "15m" : "1H"
+
+// ============================================================
+// RAW MTF SOURCE ENGINE
+// ============================================================
+
+poiOpen  = request.security(syminfo.tickerid, poiTf, open,  lookahead=barmerge.lookahead_off)
+poiHigh  = request.security(syminfo.tickerid, poiTf, high,  lookahead=barmerge.lookahead_off)
+poiLow   = request.security(syminfo.tickerid, poiTf, low,   lookahead=barmerge.lookahead_off)
+poiClose = request.security(syminfo.tickerid, poiTf, close, lookahead=barmerge.lookahead_off)
+
+primOpen  = request.security(syminfo.tickerid, primaryTf, open,  lookahead=barmerge.lookahead_off)
+primHigh  = request.security(syminfo.tickerid, primaryTf, high,  lookahead=barmerge.lookahead_off)
+primLow   = request.security(syminfo.tickerid, primaryTf, low,   lookahead=barmerge.lookahead_off)
+primClose = request.security(syminfo.tickerid, primaryTf, close, lookahead=barmerge.lookahead_off)
+
+confOpen  = request.security(syminfo.tickerid, confirmTf, open,  lookahead=barmerge.lookahead_off)
+confHigh  = request.security(syminfo.tickerid, confirmTf, high,  lookahead=barmerge.lookahead_off)
+confLow   = request.security(syminfo.tickerid, confirmTf, low,   lookahead=barmerge.lookahead_off)
+confClose = request.security(syminfo.tickerid, confirmTf, close, lookahead=barmerge.lookahead_off)
+
+// ============================================================
+// IMPULSE OBJECT ENGINE — PRIMARY TF
+// ============================================================
+
+const int pivotLen = 5
+
+float primPivHigh = request.security(syminfo.tickerid, primaryTf, ta.pivothigh(high, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float primPivLow  = request.security(syminfo.tickerid, primaryTf, ta.pivotlow(low,  pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+
+bool primNewPivHigh = not na(primPivHigh)
+bool primNewPivLow  = not na(primPivLow)
+
+var float primLegBasePrice = na
+var int   primLegDir       = 0
+var bool  primLegExists    = false
+
+if primNewPivLow
+    primLegBasePrice := primPivLow
+    primLegDir       := 1
+    primLegExists    := true
+
+if primNewPivHigh
+    primLegBasePrice := primPivHigh
+    primLegDir       := -1
+    primLegExists    := true
+
+var float primLegTerminal = na
+if primLegDir == 1 and primNewPivHigh
+    primLegTerminal := primPivHigh
+if primLegDir == -1 and primNewPivLow
+    primLegTerminal := primPivLow
+
+float primLegRange = primLegExists and not na(primLegTerminal) ? math.abs(primLegTerminal - primLegBasePrice) : na
+
+float primAtr = request.security(syminfo.tickerid, primaryTf, ta.atr(14), lookahead=barmerge.lookahead_off)
+bool  primLegAboveAtr = not na(primLegRange) and primLegRange > primAtr
+
+var float primRetrace = na
+if primLegExists and not na(primLegTerminal) and not na(primLegBasePrice)
+    primRetrace := primLegDir == 1 ? (primLegTerminal - close) / primLegRange :
+                                     (close - primLegTerminal) / primLegRange
+
+bool primLegConfirmed = not na(primRetrace) and primRetrace >= 0.5 and primLegAboveAtr
+
+// ============================================================
+// IMPULSE LIFECYCLE ENGINE
+// ============================================================
+
+var string ownerState = "OWNER_NONE"
+
+var float  curImpBase      = na
+var float  curImpTerminal  = na
+var int    curImpDir       = 0
+var float  curImpRange     = na
+var bool   curImpConfirmed = false
+
+var float  prevImpBase     = na
+var float  prevImpTerminal = na
+var int    prevImpDir      = 0
+var float  prevImpRange    = na
+
+var float  pendImpBase      = na
+var float  pendImpTerminal  = na
+var int    pendImpDir       = 0
+var float  pendImpRange     = na
+var bool   pendImpConfirmed = false
+
+const float DOMINANCE_FACTOR = 0.75
+
+if primLegExists and not na(primLegTerminal) and not na(primLegRange)
+    pendImpBase      := primLegBasePrice
+    pendImpTerminal  := primLegTerminal
+    pendImpDir       := primLegDir
+    pendImpRange     := primLegRange
+    pendImpConfirmed := primLegConfirmed
+
+bool takeoverAllowed = pendImpConfirmed and
+     not na(pendImpRange) and
+     (na(curImpRange) or pendImpRange > curImpRange * DOMINANCE_FACTOR)
+
+if takeoverAllowed
+    prevImpBase     := curImpBase
+    prevImpTerminal := curImpTerminal
+    prevImpDir      := curImpDir
+    prevImpRange    := curImpRange
+    curImpBase      := pendImpBase
+    curImpTerminal  := pendImpTerminal
+    curImpDir       := pendImpDir
+    curImpRange     := pendImpRange
+    curImpConfirmed := true
+    ownerState      := "OWNER_CURRENT"
+
+if not curImpConfirmed
+    ownerState := "OWNER_NONE"
+
+// ============================================================
+// BOUNDARY EVENT ENGINE
+// ============================================================
+
+string TAKE_HIGH    = "TAKE_HIGH"
+string TAKE_LOW     = "TAKE_LOW"
+string INSIDE_RANGE = "INSIDE_RANGE"
+string NO_EVENT     = "NO_EVENT"
+
+var string boundaryEvent = "NO_EVENT"
+
+bool prevExists = not na(prevImpBase) and not na(prevImpTerminal)
+bool curExists  = not na(curImpBase)  and not na(curImpTerminal)
+
+if prevExists and curExists
+    float prevHi = math.max(prevImpBase, prevImpTerminal)
+    float prevLo = math.min(prevImpBase, prevImpTerminal)
+    float curHi  = math.max(curImpBase,  curImpTerminal)
+    float curLo  = math.min(curImpBase,  curImpTerminal)
+    if curHi > prevHi
+        boundaryEvent := TAKE_HIGH
+    else if curLo < prevLo
+        boundaryEvent := TAKE_LOW
+    else if curHi <= prevHi and curLo >= prevLo
+        boundaryEvent := INSIDE_RANGE
+    else
+        boundaryEvent := NO_EVENT
+else
+    boundaryEvent := NO_EVENT
+
+var string structureEvent = "NONE"
+if boundaryEvent == TAKE_HIGH
+    structureEvent := curImpDir == 1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if boundaryEvent == TAKE_LOW
+    structureEvent := curImpDir == -1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if boundaryEvent == INSIDE_RANGE
+    structureEvent := "INTERNAL"
+else
+    structureEvent := "NONE"
+
+// ============================================================
+// POI CONTEXT ENGINE
+// ============================================================
+
+string POI_NONE     = "POI_NONE"
+string POI_ACTIVE   = "POI_ACTIVE"
+string POI_BROKEN   = "POI_BROKEN"
+string POI_STALE    = "POI_STALE"
+string POI_REPLACED = "POI_REPLACED"
+
+var string poiState = "POI_NONE"
+
+var float  poiBase      = na
+var float  poiTerminal  = na
+var int    poiDir       = 0
+var float  poiRange     = na
+var float  poiHi        = na
+var float  poiLo        = na
+var int    poiActivatedBar = na
+
+float poiPivHigh = request.security(syminfo.tickerid, poiTf, ta.pivothigh(high, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float poiPivLow  = request.security(syminfo.tickerid, poiTf, ta.pivotlow(low,  pivotLen, pivotLen),  lookahead=barmerge.lookahead_off)
+float poiAtr     = request.security(syminfo.tickerid, poiTf, ta.atr(14), lookahead=barmerge.lookahead_off)
+
+bool poiNewPivHigh = not na(poiPivHigh)
+bool poiNewPivLow  = not na(poiPivLow)
+
+var float poiRawBase     = na
+var float poiRawTerminal = na
+var int   poiRawDir      = 0
+var float poiRawRange    = na
+
+// CLEAN-17: защита от race condition pivotHigh + pivotLow на одном баре
+if poiNewPivLow and not poiNewPivHigh
+    poiRawBase     := poiPivLow
+    poiRawDir      := 1
+    poiRawTerminal := na
+    poiRawRange    := na
+
+if poiNewPivHigh and not poiNewPivLow
+    poiRawBase     := poiPivHigh
+    poiRawDir      := -1
+    poiRawTerminal := na
+    poiRawRange    := na
+
+if poiRawDir == 1 and poiNewPivHigh and not poiNewPivLow
+    poiRawTerminal := poiPivHigh
+    poiRawRange    := math.abs(poiRawTerminal - poiRawBase)
+
+if poiRawDir == -1 and poiNewPivLow and not poiNewPivHigh
+    poiRawTerminal := poiPivLow
+    poiRawRange    := math.abs(poiRawTerminal - poiRawBase)
+
+var float poiRetrace = na
+if not na(poiRawRange) and poiRawRange > 0 and not na(poiRawTerminal) and not na(poiRawBase)
+    poiRetrace := poiRawDir == 1 ?
+         (poiRawTerminal - close) / poiRawRange :
+         (close - poiRawTerminal) / poiRawRange
+
+bool poiRawConfirmed = not na(poiRetrace) and poiRetrace >= 0.5 and
+     not na(poiRawRange) and poiRawRange > poiAtr
+
+var float  poiPrevHi        = na
+var float  poiPrevLo        = na
+var string poiBoundaryEvent = "NO_EVENT"
+
+if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
+    poiPrevHi := poiHi
+    poiPrevLo := poiLo
+
+if not na(poiRawTerminal) and not na(poiRawBase)
+    float newPoiHi = math.max(poiRawBase, poiRawTerminal)
+    float newPoiLo = math.min(poiRawBase, poiRawTerminal)
+    if not na(poiPrevHi) and not na(poiPrevLo)
+        if newPoiHi > poiPrevHi
+            poiBoundaryEvent := "TAKE_HIGH"
+        else if newPoiLo < poiPrevLo
+            poiBoundaryEvent := "TAKE_LOW"
+        else
+            poiBoundaryEvent := "INSIDE_RANGE"
+    else
+        poiBoundaryEvent := "NO_EVENT"
+
+string poiStructureEvent = "NONE"
+if poiBoundaryEvent == "TAKE_HIGH"
+    poiStructureEvent := poiDir == 1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if poiBoundaryEvent == "TAKE_LOW"
+    poiStructureEvent := poiDir == -1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if poiBoundaryEvent == "INSIDE_RANGE"
+    poiStructureEvent := "INTERNAL"
+
+if poiState == POI_NONE
+    if poiRawConfirmed
+        poiBase         := poiRawBase
+        poiTerminal     := poiRawTerminal
+        poiDir          := poiRawDir
+        poiRange        := poiRawRange
+        poiHi           := math.max(poiBase, poiTerminal)
+        poiLo           := math.min(poiBase, poiTerminal)
+        poiState        := POI_ACTIVE
+        poiActivatedBar := bar_index
+
+if poiState == POI_ACTIVE and poiStructureEvent == "STRUCTURE_BREAK"
+    if not na(poiActivatedBar) and (bar_index - poiActivatedBar) >= 5
+        poiState := POI_BROKEN
+
+if poiState == POI_ACTIVE
+    bool poiPriceAbove = poiDir == 1  and close > poiHi
+    bool poiPriceBelow = poiDir == -1 and close < poiLo
+    if poiPriceAbove or poiPriceBelow
+        poiState := POI_STALE
+
+if poiState == POI_STALE and poiRawConfirmed
+    poiBase         := poiRawBase
+    poiTerminal     := poiRawTerminal
+    poiDir          := poiRawDir
+    poiRange        := poiRawRange
+    poiHi           := math.max(poiBase, poiTerminal)
+    poiLo           := math.min(poiBase, poiTerminal)
+    poiState        := POI_ACTIVE
+    poiActivatedBar := bar_index
+
+if poiState == POI_BROKEN and poiRawConfirmed
+    poiBase     := poiRawBase
+    poiTerminal := poiRawTerminal
+    poiDir      := poiRawDir
+    poiRange    := poiRawRange
+    poiHi       := math.max(poiBase, poiTerminal)
+    poiLo       := math.min(poiBase, poiTerminal)
+    poiState    := POI_REPLACED
+
+if poiState == POI_REPLACED
+    poiState        := POI_ACTIVE
+    poiActivatedBar := bar_index
+
+// ============================================================
+// PRIMARY OWNERSHIP ENGINE
+// ============================================================
+
+string PRIMARY_NONE      = "PRIMARY_NONE"
+string PRIMARY_CANDIDATE = "PRIMARY_CANDIDATE"
+string PRIMARY_LOCKED    = "PRIMARY_LOCKED"
+string PRIMARY_BROKEN    = "PRIMARY_BROKEN"
+
+var string primaryState = "PRIMARY_NONE"
+
+var float  primOwnerBase     = na
+var float  primOwnerTerminal = na
+var int    primOwnerDir      = 0
+var float  primOwnerRange    = na
+var float  primOwnerHi       = na
+var float  primOwnerLo       = na
+
+bool poiValid = poiState == POI_ACTIVE
+
+bool primCandidateReady = poiValid and
+     curImpConfirmed and
+     not na(curImpBase) and
+     not na(curImpTerminal) and
+     not na(curImpRange)
+
+bool primInsidePoi = false
+if primCandidateReady and not na(poiHi) and not na(poiLo)
+    float candLo = math.min(curImpBase, curImpTerminal)
+    primInsidePoi := candLo >= poiLo
+
+if primaryState == PRIMARY_NONE
+    if primCandidateReady and primInsidePoi
+        primaryState := PRIMARY_CANDIDATE
+
+if primaryState == PRIMARY_CANDIDATE
+    primaryState      := PRIMARY_LOCKED
+    primOwnerBase     := curImpBase
+    primOwnerTerminal := curImpTerminal
+    primOwnerDir      := curImpDir
+    primOwnerRange    := curImpRange
+    primOwnerHi       := math.max(primOwnerBase, primOwnerTerminal)
+    primOwnerLo       := math.min(primOwnerBase, primOwnerTerminal)
+
+if primaryState == PRIMARY_LOCKED and structureEvent == "STRUCTURE_BREAK"
+    primaryState := PRIMARY_BROKEN
+
+if not poiValid and primaryState == PRIMARY_LOCKED
+    primaryState := PRIMARY_BROKEN
+
+if primaryState == PRIMARY_BROKEN and primCandidateReady and primInsidePoi
+    primOwnerBase     := curImpBase
+    primOwnerTerminal := curImpTerminal
+    primOwnerDir      := curImpDir
+    primOwnerRange    := curImpRange
+    primOwnerHi       := math.max(primOwnerBase, primOwnerTerminal)
+    primOwnerLo       := math.min(primOwnerBase, primOwnerTerminal)
+    primaryState      := PRIMARY_LOCKED
+
+// ============================================================
+// FIB / OTE ENGINE
+// ============================================================
+
+var label proofLabel = na
+
+bool fibActive = primaryState == PRIMARY_LOCKED and
+     not na(primOwnerBase) and not na(primOwnerTerminal)
+
+var float fib0   = na
+var float fib50  = na
+var float fib705 = na
+var float fib79  = na
+var float fib100 = na
+
+if fibActive
+    float base = primOwnerBase
+    float term = primOwnerTerminal
+    float rng  = math.abs(term - base)
+    if primOwnerDir == 1
+        fib0   := base
+        fib50  := base + rng * 0.50
+        fib705 := base + rng * (1.0 - 0.705)
+        fib79  := base + rng * (1.0 - 0.79)
+        fib100 := term
+    else
+        fib0   := base
+        fib50  := base - rng * 0.50
+        fib705 := base - rng * (1.0 - 0.705)
+        fib79  := base - rng * (1.0 - 0.79)
+        fib100 := term
+
+bool priceInOte = fibActive and not na(fib50) and not na(fib79) and
+     (primOwnerDir == 1 ?
+         (close >= fib79 and close <= fib50) :
+         (close <= fib79 and close >= fib50))
+
+var float fibMem0   = na
+var float fibMem50  = na
+var float fibMem705 = na
+var float fibMem79  = na
+var float fibMem100 = na
+
+if fibActive and not na(fib0)
+    fibMem0   := fib0
+    fibMem50  := fib50
+    fibMem705 := fib705
+    fibMem79  := fib79
+    fibMem100 := fib100
+
+float drawFib0   = fibActive ? fib0   : fibMem0
+float drawFib50  = fibActive ? fib50  : fibMem50
+float drawFib705 = fibActive ? fib705 : fibMem705
+float drawFib79  = fibActive ? fib79  : fibMem79
+float drawFib100 = fibActive ? fib100 : fibMem100
+
+// ============================================================
+// VISUAL LAYER — только последний сценарий
+// CLEAN-19: удалены старые fib lines, markers, bgcolor, TAKE, CAND
+// Все объекты пересоздаются — история не остаётся
+// ============================================================
+
+// POI TF — зелёный пунктир 0 / 0.5 / 1 + стрелка направления
+var line poiLine0    = na
+var line poiLine50   = na
+var line poiLine100  = na
+var line poiArrow    = na
+var label poiLbl0    = na
+var label poiLbl50   = na
+var label poiLbl100  = na
+
+if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
+    line.delete(poiLine0)
+    line.delete(poiLine50)
+    line.delete(poiLine100)
+    line.delete(poiArrow)
+    label.delete(poiLbl0)
+    label.delete(poiLbl50)
+    label.delete(poiLbl100)
+
+    float poi0   = poiDir == 1 ? poiLo  : poiHi
+    float poi100 = poiDir == 1 ? poiHi  : poiLo
+    float poi50  = (poi0 + poi100) / 2
+
+    poiLine0   := line.new(bar_index-1, poi0,   bar_index, poi0,
+         extend=extend.right,
+         color=color.new(color.green, 30),
+         width=1, style=line.style_dashed)
+    poiLine50  := line.new(bar_index-1, poi50,  bar_index, poi50,
+         extend=extend.right,
+         color=color.new(color.green, 50),
+         width=1, style=line.style_dashed)
+    poiLine100 := line.new(bar_index-1, poi100, bar_index, poi100,
+         extend=extend.right,
+         color=color.new(color.green, 30),
+         width=1, style=line.style_dashed)
+
+    poiArrow := line.new(bar_index-10, poi0, bar_index, poi100,
+         color=color.new(color.green, 20),
+         width=2, style=line.style_arrow_right)
+
+    poiLbl0   := label.new(bar_index, poi0,
+         poiLabel + " БАЗА",
+         style=label.style_label_left,
+         color=color.new(color.green, 70),
+         textcolor=color.white, size=size.tiny)
+    poiLbl50  := label.new(bar_index, poi50,
+         poiLabel + " 0.5",
+         style=label.style_label_left,
+         color=color.new(color.green, 70),
+         textcolor=color.white, size=size.tiny)
+    poiLbl100 := label.new(bar_index, poi100,
+         poiLabel + " ТЕРМИНАЛ",
+         style=label.style_label_left,
+         color=color.new(color.green, 70),
+         textcolor=color.white, size=size.tiny)
+
+// RAW POI — показываем даже до подтверждения POI
+var line rawPoiLine = na
+var label rawPoiLbl = na
+
+if not na(poiRawBase) and not na(poiRawTerminal)
+    line.delete(rawPoiLine)
+    label.delete(rawPoiLbl)
+    rawPoiLine := line.new(bar_index-1, poiRawBase, bar_index, poiRawBase,
+         extend=extend.right,
+         color=color.new(color.green, 70),
+         width=1, style=line.style_dotted)
+    rawPoiLbl := label.new(bar_index, poiRawBase,
+         poiLabel + " RAW БАЗА (" + str.tostring(poiRawBase, "#.##") + ")",
+         style=label.style_label_left,
+         color=color.new(color.green, 80),
+         textcolor=color.white, size=size.tiny)
+
+// RAW TERMINAL
+var line rawTermLine = na
+var label rawTermLbl = na
+
+if not na(poiRawTerminal)
+    line.delete(rawTermLine)
+    label.delete(rawTermLbl)
+    rawTermLine := line.new(bar_index-1, poiRawTerminal, bar_index, poiRawTerminal,
+         extend=extend.right,
+         color=color.new(color.green, 70),
+         width=1, style=line.style_dotted)
+    rawTermLbl := label.new(bar_index, poiRawTerminal,
+         poiLabel + " RAW ТЕРМ (" + str.tostring(poiRawTerminal, "#.##") + ")" +
+         " conf=" + str.tostring(poiRawConfirmed),
+         style=label.style_label_left,
+         color=color.new(color.green, 80),
+         textcolor=color.white, size=size.tiny)
+
+// PRIMARY TF — fib стандартные цвета + стрелка
+var line primLine0   = na
+var line primLine50  = na
+var line primLine705 = na
+var line primLine79  = na
+var line primLine100 = na
+var line primArrow   = na
+var label primLbl0   = na
+var label primLbl50  = na
+var label primLbl705 = na
+var label primLbl79  = na
+var label primLbl100 = na
+
+if primaryState == PRIMARY_LOCKED and not na(fib0)
+    line.delete(primLine0)
+    line.delete(primLine50)
+    line.delete(primLine705)
+    line.delete(primLine79)
+    line.delete(primLine100)
+    line.delete(primArrow)
+    label.delete(primLbl0)
+    label.delete(primLbl50)
+    label.delete(primLbl705)
+    label.delete(primLbl79)
+    label.delete(primLbl100)
+
+    primLine0   := line.new(bar_index-1, fib0,   bar_index, fib0,
+         extend=extend.right,
+         color=color.gray, width=1, style=line.style_solid)
+    primLine50  := line.new(bar_index-1, fib50,  bar_index, fib50,
+         extend=extend.right,
+         color=color.new(color.blue, 40),
+         width=1, style=line.style_dashed)
+    primLine705 := line.new(bar_index-1, fib705, bar_index, fib705,
+         extend=extend.right,
+         color=color.new(color.orange, 30),
+         width=1, style=line.style_dashed)
+    primLine79  := line.new(bar_index-1, fib79,  bar_index, fib79,
+         extend=extend.right,
+         color=color.new(color.red, 20),
+         width=1, style=line.style_dashed)
+    primLine100 := line.new(bar_index-1, fib100, bar_index, fib100,
+         extend=extend.right,
+         color=color.gray, width=1, style=line.style_solid)
+
+    primArrow := line.new(bar_index-10, fib0, bar_index, fib100,
+         color=color.new(color.blue, 20),
+         width=2, style=line.style_arrow_right)
+
+    primLbl0   := label.new(bar_index, fib0,
+         primaryLabel + " 0",
+         style=label.style_label_left,
+         color=color.new(color.gray, 70),
+         textcolor=color.white, size=size.tiny)
+    primLbl50  := label.new(bar_index, fib50,
+         primaryLabel + " 0.5",
+         style=label.style_label_left,
+         color=color.new(color.blue, 60),
+         textcolor=color.white, size=size.tiny)
+    primLbl705 := label.new(bar_index, fib705,
+         primaryLabel + " 0.705",
+         style=label.style_label_left,
+         color=color.new(color.orange, 50),
+         textcolor=color.white, size=size.tiny)
+    primLbl79  := label.new(bar_index, fib79,
+         primaryLabel + " 0.79 OTE",
+         style=label.style_label_left,
+         color=color.new(color.red, 40),
+         textcolor=color.white, size=size.tiny)
+    primLbl100 := label.new(bar_index, fib100,
+         primaryLabel + " 1",
+         style=label.style_label_left,
+         color=color.new(color.gray, 70),
+         textcolor=color.white, size=size.tiny)
+
+// OTE зона — зелёная заливка
+bgcolor(priceInOte ? color.new(color.green, 92) : na, title="OTE зона")
+
+// CONFIRM TF — жёлтый пунктир по уровням 0 / 0.5 / 1
+var line confLine0   = na
+var line confLine50  = na
+var line confLine100 = na
+var line confArrow   = na
+var label confLbl0   = na
+var label confLbl50  = na
+var label confLbl100 = na
+
+if primaryState == PRIMARY_LOCKED and not na(fib0)
+    line.delete(confLine0)
+    line.delete(confLine50)
+    line.delete(confLine100)
+    line.delete(confArrow)
+    label.delete(confLbl0)
+    label.delete(confLbl50)
+    label.delete(confLbl100)
+
+    confLine0   := line.new(bar_index-1, fib0,   bar_index, fib0,
+         extend=extend.right,
+         color=color.new(color.yellow, 30),
+         width=1, style=line.style_dashed)
+    confLine50  := line.new(bar_index-1, fib50,  bar_index, fib50,
+         extend=extend.right,
+         color=color.new(color.yellow, 30),
+         width=1, style=line.style_dashed)
+    confLine100 := line.new(bar_index-1, fib100, bar_index, fib100,
+         extend=extend.right,
+         color=color.new(color.yellow, 30),
+         width=1, style=line.style_dashed)
+
+    confArrow := line.new(bar_index-10, fib0, bar_index, fib100,
+         color=color.new(color.yellow, 20),
+         width=1, style=line.style_arrow_right)
+
+    confLbl0   := label.new(bar_index, fib0,
+         confirmLabel + " 0",
+         style=label.style_label_left,
+         color=color.new(color.yellow, 60),
+         textcolor=color.black, size=size.tiny)
+    confLbl50  := label.new(bar_index, fib50,
+         confirmLabel + " 0.5",
+         style=label.style_label_left,
+         color=color.new(color.yellow, 60),
+         textcolor=color.black, size=size.tiny)
+    confLbl100 := label.new(bar_index, fib100,
+         confirmLabel + " 1",
+         style=label.style_label_left,
+         color=color.new(color.yellow, 60),
+         textcolor=color.black, size=size.tiny)
+
+// СЛОМ структуры PRIMARY
+if primaryState == PRIMARY_BROKEN and primaryState[1] == PRIMARY_LOCKED
+    label.new(bar_index, high,
+         "СЛОМ " + primaryLabel,
+         style=label.style_label_down,
+         color=color.new(color.red, 10),
+         textcolor=color.white,
+         size=size.small)
+
+// PROOF LABEL — русский
+label.delete(proofLabel)
+string proofText =
+     "ПРОФИЛЬ: " + selectedProfile + "\n" +
+     "POI: "     + poiLabel     + " | " + poiState     + "\n" +
+     "PRIMARY: " + primaryLabel + " | " + primaryState + "\n" +
+     "CONFIRM: " + confirmLabel + "\n" +
+     "OTE: "     + (priceInOte ? "ДА" : "НЕТ") + "\n" +
+     "ВЛАДЕЛЕЦ: " + ownerState + "\n" +
+     "rawB: "    + str.tostring(poiRawBase,     "#.##") + "\n" +
+     "rawT: "    + str.tostring(poiRawTerminal, "#.##") + "\n" +
+     "rawConf: " + str.tostring(poiRawConfirmed)
+proofLabel := label.new(bar_index, high,
+     proofText,
+     style=label.style_label_left,
+     color=color.new(color.black, 70),
+     textcolor=color.white,
+     size=size.small)

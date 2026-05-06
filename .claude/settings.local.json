@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__tradingview__ui_keyboard",
+      "mcp__tradingview__data_get_pine_labels"
+    ]
+  }
+}

@@ -1,0 +1,80 @@
+ЯЗЫК ОБЩЕНИЯ: только русский.
+
+[SMC CANON]
+primary impulse → fib / OTE → candidate in OTE → confirmations → OB → correction → IDM → trade
+candidate = exact sweep / cause candle, lock immediately, validation downstream
+no lower layer before upper proven
+code YES / chart NO = code WRONG
+
+[CRITICAL CONDITIONS]
+- один узел = одно решение
+- no branching
+- BEFORE архив обязателен до любого изменения кода
+- AFTER архив обязателен после изменения
+- action log обновляется после каждого этапа
+- STOP on conflict
+
+[SCOPE]
+Layer: 0 — Primary Impulse
+Node: SINGLE — Raw MTF Source Engine (Profile A/B + request.security)
+
+---
+
+CLEAN-02 — RAW MTF SOURCE ENGINE
+
+STEP 1 — BEFORE ARCHIVE (до любого кода)
+Скопируй D:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine
+в      D:\SMC_PROJECT_CLEAN\01_PINE\archive\smc_clean_l0_core_BEFORE_CLEAN02_20250502.pine
+Если копирование не удалось — СТОП, код не трогать.
+
+STEP 2 — СОХРАНИ TASK FILE
+Сохрани текст этого задания в:
+D:\SMC_PROJECT_CLEAN\01_PINE\tasks_archive\task_20250502_CLEAN02_raw_mtf_source.txt
+
+STEP 3 — ПРОЧИТАЙ DONOR ANALYSIS
+Прочитай D:\SMC_PROJECT_CLEAN\01_PINE\donor_analysis\donor_analysis_CLEAN00.md
+Извлеки: какие именно pivot/zigzag механизмы работали в доноре для определения ног импульса.
+Зафиксируй находку — она войдёт в analysis файл.
+
+STEP 4 — ОБНОВИ CORE ФАЙЛ
+Открой D:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine
+Добавь после блока PROFILE ENGINE:
+
+// ============================================================
+// RAW MTF SOURCE ENGINE
+// Только получение сырых данных с нужных TF.
+// raw != owner, raw != POI, raw != primary
+// ============================================================
+
+// POI TF raw OHLC
+poiOpen  = request.security(syminfo.tickerid, poiTf, open,  lookahead=barmerge.lookahead_off)
+poiHigh  = request.security(syminfo.tickerid, poiTf, high,  lookahead=barmerge.lookahead_off)
+poiLow   = request.security(syminfo.tickerid, poiTf, low,   lookahead=barmerge.lookahead_off)
+poiClose = request.security(syminfo.tickerid, poiTf, close, lookahead=barmerge.lookahead_off)
+
+// PRIMARY TF raw OHLC
+primOpen  = request.security(syminfo.tickerid, primaryTf, open,  lookahead=barmerge.lookahead_off)
+primHigh  = request.security(syminfo.tickerid, primaryTf, high,  lookahead=barmerge.lookahead_off)
+primLow   = request.security(syminfo.tickerid, primaryTf, low,   lookahead=barmerge.lookahead_off)
+primClose = request.security(syminfo.tickerid, primaryTf, close, lookahead=barmerge.lookahead_off)
+
+// CONFIRM TF raw OHLC
+confOpen  = request.security(syminfo.tickerid, confirmTf, open,  lookahead=barmerge.lookahead_off)
+confHigh  = request.security(syminfo.tickerid, confirmTf, high,  lookahead=barmerge.lookahead_off)
+confLow   = request.security(syminfo.tickerid, confirmTf, low,   lookahead=barmerge.lookahead_off)
+confClose = request.security(syminfo.tickerid, confirmTf, close, lookahead=barmerge.lookahead_off)
+
+// GATE: raw данные получены, owner не назначен
+// Next stage: CLEAN-03 Impulse Object Engine
+
+STEP 5 — AFTER ARCHIVE (сразу после изменения)
+Скопируй обновлённый D:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine
+в      D:\SMC_PROJECT_CLEAN\01_PINE\archive\smc_clean_l0_core_AFTER_CLEAN02_20250502.pine
+
+STEP 6 — СОХРАНИ ANALYSIS
+Сохрани в D:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive\analysis_20250502_CLEAN02_raw_mtf_source.md
+
+STEP 7 — ОБНОВИ ACTION LOG
+Добавь запись в D:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive\codex_actions_log.txt
+
+STEP 8 — ОТЧЁТ

@@ -1,0 +1,10 @@
+﻿ULTRA CONTROL ACTIVE — FOLLOW SMC_ULTRA_CONTROL_MASTER.md
+
+[CURRENT TASK NODE]
+CLEAN-00-R
+
+REPAIR CLEAN-00 BASELINE / QUARANTINE CONTAMINATED CLEAN FILE
+
+Root: D:\SMC_PROJECT_CLEAN
+Goal: quarantine contaminated 628-line clean file and replace active core with exact CLEAN-00 baseline only.
+Forbidden in active baseline: request.security, lifecycle, owner, break, fib, Candidate/Liquidity/Sweep/OB/Entry logic.

@@ -1,0 +1,710 @@
+ULTRA CONTROL ACTIVE — FOLLOW SMC_ULTRA_CONTROL_MASTER.md
+
+[CURRENT TASK NODE]
+
+CLEAN-01:
+
+DONOR LOGIC EXTRACTION — NO CODE CHANGE
+
+[ROOT PATH]
+
+Clean rebuild root:
+
+D:\SMC_PROJECT_CLEAN
+
+Старый проект-донор:
+
+D:\SMC_PROJECT
+
+[GOAL]
+
+Провести глубокий donor-analysis старых рабочих Pine-скриптов и извлечь только полезные алгоритмические наработки для нового clean rebuild.
+
+Код НЕ менять.
+
+Это analysis-only этап.
+
+Это не implementation.
+Это не ремонт старого файла.
+Это не перенос legacy-кода целиком.
+Это не добавление request.security.
+Это не добавление POI / Primary / Break.
+Это не Candidate / Liquidity / Sweep / OB / Entry.
+
+Цель этапа:
+
+1. Проверить, что CLEAN-00 baseline восстановлен корректно.
+2. Найти все старые Pine-скрипты проекта.
+3. Классифицировать их.
+4. Извлечь рабочие алгоритмы:
+   - previous impulse memory;
+   - current active impulse;
+   - next impulse search;
+   - rearm;
+   - promotion next -> current;
+   - rollback;
+   - persistent break visual;
+   - LAST ONLY.
+5. Отделить полезные механики от мусора.
+6. Сопоставить donor-механики с новым каноном Global Impulse Graph.
+7. Подготовить основу для CLEAN-02.
+
+[ACTIVE CLEAN FILE]
+
+Проверить:
+
+D:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine
+
+Ожидаемое CLEAN-00-R состояние:
+
+- файл существует;
+- в папке core только один active `.pine`;
+- line count около 102;
+- содержит PROFILE_A;
+- содержит PROFILE_B;
+- содержит selectedProfile;
+- содержит profilePoiTimeframe;
+- содержит profilePrimaryTimeframe;
+- содержит profileConfirmTimeframe;
+- содержит minimal proof label;
+- НЕ содержит request.security;
+- НЕ содержит f_latest_confirmed_impulse;
+- НЕ содержит primaryImpulseExists;
+- НЕ содержит previousImpulseExists;
+- НЕ содержит nextImpulseExists;
+- НЕ содержит rearmNextImpulse;
+- НЕ содержит impulseEngineState;
+- НЕ содержит currentPrimaryTakeoverAllowed;
+- НЕ содержит previousAnchorActiveValid;
+- НЕ содержит activeOwnerStateFinal;
+- НЕ содержит fibOwnerStateFinal;
+- НЕ содержит mtfCurrentPrimaryBreakLevel;
+- НЕ содержит protectedLevelDebugEnabled;
+- НЕ содержит finalFibVisualMemoryValid;
+- НЕ содержит Candidate / Liquidity / Sweep / OB / Entry.
+
+Если active clean file не соответствует — STOP.
+
+[DIRECTORIES TO SCAN FOR DONORS]
+
+Сканировать старые donor-файлы:
+
+D:\SMC_PROJECT\01_PINE\core
+D:\SMC_PROJECT\01_PINE\archive
+
+Также проверить, если существуют:
+
+D:\SMC_PROJECT\01_PINE\core\то что работает
+D:\SMC_PROJECT\01_PINE\old
+D:\SMC_PROJECT\01_PINE\backup
+D:\SMC_PROJECT\01_PINE\_archive
+D:\SMC_PROJECT\01_PINE\versions
+D:\SMC_PROJECT\01_PINE\tasks_archive
+D:\SMC_PROJECT\01_PINE\analysis_archive
+
+Для Pine-файлов искать:
+
+*.pine
+
+Для analysis/task файлов искать только те, которые помогают понять stages и donor logic:
+
+*.md
+*.txt
+
+[OUTPUT DIRECTORIES]
+
+Сохранять результаты только в clean project:
+
+D:\SMC_PROJECT_CLEAN\01_PINE\archive
+D:\SMC_PROJECT_CLEAN\01_PINE\tasks_archive
+D:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive
+D:\SMC_PROJECT_CLEAN\01_PINE\donor_analysis
+
+[STRICT FORBIDDEN]
+
+Запрещено:
+
+- менять D:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine;
+- менять любые старые donor-скрипты;
+- копировать старый код в clean active file;
+- создавать новый Pine-код;
+- начинать CLEAN-02;
+- чинить WAIT_NEW_POI;
+- чинить POI;
+- чинить primary;
+- чинить break;
+- добавлять request.security;
+- добавлять fib;
+- добавлять protected level;
+- добавлять owner logic;
+- добавлять Candidate / Liquidity / Sweep / OB / Entry;
+- подменять donor extraction задачей по архивам;
+- подменять donor extraction визуальным анализом;
+- объявлять старый файл новой базой.
+
+[GLOBAL CANON FOR THIS STAGE]
+
+Новый clean rebuild строится вокруг:
+
+GLOBAL IMPULSE GRAPH.
+
+Базовый объект:
+
+IMPULSE.
+
+Импульс хранит:
+
+- TF;
+- direction;
+- start;
+- end;
+- high;
+- low;
+- range;
+- previous reference;
+- current ownership state;
+- next candidate state.
+
+Главное структурное событие:
+
+следующий импульс снимает HIGH или LOW предыдущего импульса.
+
+Слом НЕ определяется:
+
+- 0.79;
+- OTE;
+- глубиной коррекции;
+- произвольным protected level;
+- одиночной внутренней линией;
+- визуальной меткой.
+
+Fib 0/1 = high/low импульса.
+
+Fib 0.5–0.79 = correction / OTE / quality / execution layer.
+
+Профили только A и B.
+
+PROFILE A:
+- POI TF = 4H / 240
+- PRIMARY TF = 1H / 60
+- CONFIRM TF = 15m / 15
+
+PROFILE B:
+- POI TF = 1D / D
+- PRIMARY TF = 4H / 240
+- CONFIRM TF = 1H / 60
+
+DISPLAY TF = экран.
+PROFILE TF = логика.
+
+[STEP 1 — VERIFY CLEAN-00-R]
+
+Проверить:
+
+1. Clean active file exists.
+2. Core contains exactly one active `.pine`.
+3. Line count.
+4. PROFILE_A present.
+5. PROFILE_B present.
+6. selectedProfile present.
+7. profilePoiTimeframe present.
+8. profilePrimaryTimeframe present.
+9. profileConfirmTimeframe present.
+10. Minimal proof label present.
+11. request.security absent.
+12. f_latest_confirmed_impulse absent.
+13. legacy lifecycle markers absent:
+    - primaryImpulseExists
+    - previousImpulseExists
+    - nextImpulseExists
+    - rearmNextImpulse
+    - impulseEngineState
+14. current/final owner markers absent:
+    - currentPrimaryTakeoverAllowed
+    - previousAnchorActiveValid
+    - activeOwnerStateFinal
+15. fib/protected/debug markers absent:
+    - mtfCurrentPrimaryBreakLevel
+    - protectedLevelDebugEnabled
+    - finalFibVisualMemoryValid
+    - fibVisualActive
+16. Candidate / Liquidity / Sweep / OB / Entry absent.
+
+Если проверка не проходит — STOP.
+
+[STEP 2 — SNAPSHOT CLEAN ACTIVE FILE]
+
+Так как код НЕ меняется, создать snapshot текущего clean active file:
+
+D:\SMC_PROJECT_CLEAN\01_PINE\archive\smc_clean_l0_core_YYYYMMDD_HHMM_snapshot_clean_01_donor_extraction.pine
+
+Это snapshot, не BEFORE archive.
+
+[STEP 3 — SAVE TASK FILE]
+
+Сохранить полный текст этого задания:
+
+D:\SMC_PROJECT_CLEAN\01_PINE\tasks_archive\task_YYYYMMDD_HHMM_clean_01_donor_extraction.txt
+
+Если task не сохранён — STOP.
+
+[STEP 4 — SCAN DONOR FILES]
+
+Найти все `.pine` в donor directories.
+
+Для каждого `.pine` указать:
+
+- path;
+- modified time;
+- file size;
+- line count;
+- sha1/hash;
+- first 5 lines;
+- classification;
+- key markers.
+
+Дополнительно проверить task/analysis старого проекта, чтобы понять историю stages:
+
+- stage_5;
+- stage_6;
+- stage_7;
+- stage_7_2;
+- L0;
+- completion;
+- rearm;
+- rollback;
+- primary;
+- previous;
+- next;
+- promotion;
+- break.
+
+[STEP 5 — MARKER SCAN]
+
+Для каждого donor-файла проверить маркеры.
+
+MTF markers:
+
+- profilePoiTimeframe
+- profilePrimaryTimeframe
+- profileConfirmTimeframe
+- anchorTimeframe = chartTimeframeSeconds
+- structuralTimeframe
+- confirmTimeframe
+- request.security
+
+Legacy lifecycle markers:
+
+- primaryImpulseExists
+- previousImpulseExists
+- nextImpulseExists
+- rearmNextImpulse
+- impulseEngineState
+- primaryImpulseStartBar
+- primaryImpulseEndBar
+- primaryImpulseDir
+- primaryImpulseHigh
+- primaryImpulseLow
+- previousImpulseStartBar
+- previousImpulseEndBar
+- previousImpulseDir
+- previousImpulseHigh
+- previousImpulseLow
+- nextImpulseStartBar
+- nextImpulseEndBar
+- nextImpulseDir
+- nextImpulseHigh
+- nextImpulseLow
+- lblNextSearch
+- lblNextConfirm
+- NEXT SEARCH
+- NEXT CONFIRM
+- promotion
+- rollback
+- broken
+- primary break
+
+Final MTF markers:
+
+- currentPrimaryTakeoverAllowed
+- currentPrimaryNeedsRefresh
+- previousAnchorActiveValid
+- previousOwnerFallbackAllowed
+- activeOwnerStateFinal
+- fibOwnerStateFinal
+- currentLockStateFinal
+- previousAnchorStateFinal
+- currentTakeoverRejectReason
+
+Later visual/debug markers:
+
+- f_ruOwnerState
+- f_ruBreakState
+- mtfCurrentPrimaryBreakLevel
+- protectedLevelDebugEnabled
+- mtfCurrentPrimaryProtectedLevel
+- finalProtectedLevelLine
+- finalTemp079Line
+- finalFibVisualMemoryValid
+- fibVisualActive
+- fibVisualSourceFinal
+- FIB ВИЗ
+
+Forbidden-as-base markers:
+
+- chart-dependent MTF;
+- mixed old/new profile logic;
+- 0.79 used as break;
+- fib memory used as owner;
+- display TF used as logic;
+- visual labels used as state source.
+
+[STEP 6 — CLASSIFY EACH DONOR FILE]
+
+Каждый файл классифицировать:
+
+A. WORKING LEGACY DONOR
+
+Есть полезные рабочие элементы:
+- previous/current/next;
+- rearm;
+- promotion;
+- rollback;
+- break visual persistence.
+
+Может быть грязным, но полезен как donor.
+
+B. FIXED-MTF PARTIAL DONOR
+
+Есть fixed role profile / final MTF blocks, но lifecycle incomplete.
+
+C. VISUAL-ONLY DONOR
+
+Есть русификация, fib memory, trace, labels, transparency.
+
+Использовать только для visual layer later.
+
+D. DEGRADED CURRENT BRANCH
+
+Есть смешение visual/fib/protected/0.79, но нет полноценного lifecycle.
+
+Не использовать как base.
+
+E. INVALID MIXED BRANCH
+
+Конфликтные маркеры, нельзя использовать как источник.
+
+F. UNKNOWN
+
+Недостаточно данных.
+
+[STEP 7 — SELECT MAIN DONOR CANDIDATES]
+
+Выбрать не более 5 главных donor candidates:
+
+1. Лучший donor для previous/current/next lifecycle.
+2. Лучший donor для rearm.
+3. Лучший donor для promotion next -> current.
+4. Лучший donor для rollback / break persistence.
+5. Лучший donor для visual-only later.
+
+Для каждого указать:
+
+- file path;
+- line count;
+- why selected;
+- what to extract;
+- what not to extract.
+
+[STEP 8 — EXTRACT USEFUL ALGORITHMS]
+
+Из donor-файлов извлечь только рабочие механики.
+
+1. PREVIOUS IMPULSE MEMORY
+
+Найти:
+
+- где previous impulse создавался;
+- где хранились high/low/start/end/dir;
+- как previous не затирался current;
+- как previous использовался для rollback;
+- line ranges;
+- variables;
+- что полезно;
+- что выбросить.
+
+2. CURRENT ACTIVE IMPULSE
+
+Найти:
+
+- как current/primary impulse становился active;
+- как удерживался active owner;
+- как не исчезал без причины;
+- какие условия были для фиксации;
+- line ranges;
+- variables;
+- полезные идеи;
+- мусор.
+
+3. NEXT IMPULSE SEARCH
+
+Найти:
+
+- как искался next impulse;
+- что запускало поиск;
+- какие условия подтверждали next;
+- как показывался NEXT SEARCH;
+- как показывался NEXT CONFIRM;
+- line ranges;
+- variables.
+
+4. REARM
+
+Найти:
+
+- как rearmNextImpulse работал;
+- что сбрасывал;
+- что сохранял;
+- когда запускал поиск next;
+- line ranges;
+- variables.
+
+5. PROMOTION NEXT -> CURRENT
+
+Найти:
+
+- как next становился primary/current;
+- какие были условия promotion;
+- какие ошибки были;
+- что можно использовать в новом Takeover / Promotion Engine.
+
+6. ROLLBACK
+
+Найти:
+
+- как происходил откат к previous;
+- как сохранялся previous context;
+- как break переводил owner;
+- line ranges.
+
+7. BREAK VISUAL PERSISTENCE
+
+Найти:
+
+- как сохранялась линия слома;
+- как сохранялась метка слома;
+- что было полезно для LAST ONLY.
+
+8. LAST ONLY
+
+Найти:
+
+- как удалялись старые объекты;
+- как сохранялся только последний сценарий;
+- что нужно перенести в чистый visual layer.
+
+[STEP 9 — REJECT WRONG IDEAS]
+
+Отдельно выписать, что НЕ переносить:
+
+- chart-dependent MTF;
+- auto profile by display TF;
+- legacy pivot noise;
+- recency-only takeover;
+- 0.79 as break;
+- protected line as final break;
+- fib memory as owner;
+- visual labels as source of logic;
+- Candidate / Sweep / OB / Entry from old branch.
+
+[STEP 10 — MAP DONOR LOGIC TO GLOBAL CANON]
+
+Создать таблицу сопоставления:
+
+legacy previousImpulse
+->
+new previous impulse reference
+
+legacy primaryImpulse/current
+->
+new current impulse owner
+
+legacy nextImpulse
+->
+new next impulse candidate
+
+legacy rearmNextImpulse
+->
+new Recovery / Rearm Engine
+
+legacy promotion
+->
+new Takeover / Promotion Engine
+
+legacy rollback
+->
+new Owner / Rearm rollback path
+
+legacy break visual
+->
+new persistent break visual layer
+
+legacy fib
+->
+later Fib / OTE Visual Engine only
+
+legacy labels
+->
+later Russian / Visual Layer only
+
+[STEP 11 — DEFINE REQUIRED CLEAN ENGINES]
+
+На основе donor extraction подтвердить, что clean rebuild должен строиться по engines:
+
+1. Profile Engine.
+2. Raw MTF Source Engine.
+3. Impulse Object Engine.
+4. Impulse Lifecycle Engine.
+5. Takeover / Promotion Engine.
+6. Boundary Event Engine.
+7. MTF Interpretation Engine.
+8. POI Context Engine.
+9. Primary Ownership Engine.
+10. Confirm Engine.
+11. Owner / Rearm Engine.
+12. Recovery Engine.
+13. Fib / OTE Engine.
+14. Visual Layer.
+
+Для каждого engine указать:
+
+- какие donor-механики помогут;
+- какие donor-механики запрещены;
+- какие данные нужны;
+- какой gate будет проверять корректность.
+
+[STEP 12 — SAVE DONOR ANALYSIS]
+
+Сохранить donor-analysis:
+
+D:\SMC_PROJECT_CLEAN\01_PINE\donor_analysis\donor_logic_extraction_YYYYMMDD_HHMM.md
+
+Файл должен содержать:
+
+1. Inventory table.
+2. Classification table.
+3. Main donor candidates.
+4. Useful algorithm extraction.
+5. Rejected wrong ideas.
+6. Mapping donor -> clean canon.
+7. Clean engine dependency table.
+8. Recommendation for CLEAN-02.
+
+[STEP 13 — SAVE ANALYSIS FILE]
+
+Сохранить stage-analysis:
+
+D:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive\analysis_YYYYMMDD_HHMM_clean_01_donor_extraction.md
+
+Analysis file должен содержать:
+
+1. Active clean file verification.
+2. Snapshot path.
+3. Donor files scanned.
+4. Donor classification summary.
+5. Main donor candidates.
+6. Useful algorithms found.
+7. Discarded ideas.
+8. Mapping completed.
+9. Code changed: NO.
+10. Next allowed stage.
+
+[STRICT STOP CONDITIONS]
+
+STOP, если:
+
+- clean active file отсутствует;
+- в clean core больше одного .pine;
+- clean active file line count не около 102;
+- clean active file уже содержит request.security;
+- clean active file содержит legacy lifecycle;
+- невозможно создать snapshot;
+- невозможно сохранить task;
+- невозможно сохранить analysis;
+- donor files не найдены;
+- Codex пытается менять код;
+- Codex пытается сразу реализовать CLEAN-02;
+- Codex выбирает старый donor как base.
+
+[FINAL RESPONSE FROM CODEX]
+
+Ответить только:
+
+1. Clean active file verified:
+   path
+
+2. Clean active line count:
+   value
+
+3. Snapshot created:
+   path
+
+4. Task saved:
+   path
+
+5. Analysis saved:
+   path
+
+6. Donor analysis saved:
+   path
+
+7. Pine code changed:
+   NO
+
+8. Donor files scanned:
+   count
+
+9. Donor files classified:
+   YES/NO
+
+10. Main donor candidates selected:
+   list path + line count + role
+
+11. Working legacy donor candidates:
+   list path + line count + reason
+
+12. Fixed-MTF partial donors:
+   list path + line count + reason
+
+13. Visual-only donors:
+   list path + line count + reason
+
+14. Useful algorithms extracted:
+   list
+
+15. Rejected wrong ideas:
+   list
+
+16. Donor-to-canon mapping completed:
+   YES/NO
+
+17. Clean engine dependency table created:
+   YES/NO
+
+18. Old file selected as base:
+   NO
+
+19. Candidate/Liquidity/Sweep/OB/Entry touched:
+   NO
+
+20. Next allowed stage:
+   CLEAN-02 PROFILE ENGINE
+
+21. Compile/static status:
+   not applicable, code not changed
+
+22. Confirmation:
+   no archive was overwritten
+
+23. Confirmation:
+   old code versions preserved

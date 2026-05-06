@@ -1,0 +1,101 @@
+ЯЗЫК ОБЩЕНИЯ: только русский.
+
+[SMC CANON]
+primary impulse → fib / OTE → candidate in OTE → confirmations → OB → correction → IDM → trade
+no lower layer before upper proven
+code YES / chart NO = code WRONG
+
+[CRITICAL CONDITIONS]
+- один узел = одно решение
+- BEFORE архив обязателен до любого изменения кода
+- AFTER архив обязателен после изменения
+- action log обновляется после каждого этапа
+- STOP on conflict
+
+[SCOPE]
+Layer: 0 — Primary Impulse
+Node: SINGLE — Impulse Object Engine (pivot detection + leg structure per TF)
+
+---
+
+CLEAN-03 — IMPULSE OBJECT ENGINE
+
+STEP 1 — BEFORE ARCHIVE
+Скопируй D:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine
+в      D:\SMC_PROJECT_CLEAN\01_PINE\archive\smc_clean_l0_core_BEFORE_CLEAN03_20250502.pine
+Если не удалось — СТОП.
+
+STEP 2 — СОХРАНИ TASK FILE
+D:\SMC_PROJECT_CLEAN\01_PINE\tasks_archive\task_20250502_CLEAN03_impulse_object_engine.txt
+
+STEP 3 — ПРОЧИТАЙ ТЕКУЩИЙ CORE ФАЙЛ
+Прочитай D:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine полностью.
+Прочитай D:\SMC_PROJECT_CLEAN\01_PINE\donor_analysis\donor_analysis_CLEAN00.md полностью.
+
+STEP 4 — ОБНОВИ CORE ФАЙЛ
+Добавь после блока RAW MTF SOURCE ENGINE новый блок:
+
+// ============================================================
+// IMPULSE OBJECT ENGINE — PRIMARY TF
+// Основа: ta.pivothigh / ta.pivotlow с задержкой pivotLen баров
+// Три freeze-условия из донора: higher-low + ATR gate + sequence counter
+// raw impulse candidate → не owner, не POI, не confirmed
+// ============================================================
+
+int   pivotLen = 5
+
+// Pivot detection на PRIMARY TF
+float primPivHigh = request.security(syminfo.tickerid, primaryTf, ta.pivothigh(high, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float primPivLow  = request.security(syminfo.tickerid, primaryTf, ta.pivotlow(low,  pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+
+bool primNewPivHigh = not na(primPivHigh)
+bool primNewPivLow  = not na(primPivLow)
+
+// Impulse leg candidate — PRIMARY TF
+var float primLegBasePrice = na
+var float primLegTermPrice = na
+var int   primLegDir       = 0    // 1=bull -1=bear
+var bool  primLegExists    = false
+
+// Bull leg: base=pivotLow → terminal=pivotHigh
+if primNewPivLow
+    primLegBasePrice := primPivLow
+    primLegDir       := 1
+    primLegExists    := true
+
+// Bear leg: base=pivotHigh → terminal=pivotLow
+if primNewPivHigh
+    primLegBasePrice := primPivHigh
+    primLegDir       := -1
+    primLegExists    := true
+
+// Terminal — последний экстремум в направлении ноги
+var float primLegTerminal = na
+if primLegDir == 1 and primNewPivHigh
+    primLegTerminal := primPivHigh
+if primLegDir == -1 and primNewPivLow
+    primLegTerminal := primPivLow
+
+// Leg range
+float primLegRange = primLegExists and not na(primLegTerminal) ? math.abs(primLegTerminal - primLegBasePrice) : na
+
+// ATR gate — шумозащита (из донора)
+float primAtr = request.security(syminfo.tickerid, primaryTf, ta.atr(14), lookahead=barmerge.lookahead_off)
+bool  primLegAboveAtr = not na(primLegRange) and primLegRange > primAtr
+
+// Retrace >= 0.5 — confirmation rule
+var float primRetrace = na
+if primLegExists and not na(primLegTerminal) and not na(primLegBasePrice)
+    primRetrace := primLegDir == 1 ? (primLegTerminal - close) / primLegRange :
+                                     (close - primLegTerminal) / primLegRange
+
+bool primLegConfirmed = not na(primRetrace) and primRetrace >= 0.5 and primLegAboveAtr
+
+// GATE: объект ноги существует, confirmation rule применена
+// owner не назначен — это следующий этап CLEAN-04
+// Next stage: CLEAN-04 Impulse Lifecycle Engine
+
+STEP 5 — AFTER ARCHIVE
+STEP 6 — СОХРАНИ ANALYSIS
+STEP 7 — ОБНОВИ ACTION LOG
+STEP 8 — ОТЧЁТ

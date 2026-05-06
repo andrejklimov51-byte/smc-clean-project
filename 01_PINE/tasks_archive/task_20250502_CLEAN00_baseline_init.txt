@@ -1,0 +1,155 @@
+[SMC CANON]
+primary impulse → fib / OTE → candidate in OTE → confirmations → OB → correction → IDM → trade
+candidate = exact sweep / cause candle, lock immediately, validation downstream
+no lower layer before upper proven
+code YES / chart NO = code WRONG
+
+[CRITICAL CONDITIONS]
+- no branching
+- one node only
+- no lower layer before upper
+- no assumptions
+- archive mandatory before any code change
+- PREAMBLE mandatory
+- STOP on conflict
+
+[SCOPE]
+Layer: 0 — Primary Impulse
+Node: SINGLE — audit active file state + create new clean project baseline
+
+---
+
+STAGE 0 — FULL AUDIT + CLEAN PROJECT INIT
+
+STEP 1 — ARCHIVE ACTIVE FILE (before anything else, no code change)
+Copy C:\SMC_PROJECT\01_PINE\core\smc_core_detector_L0_completion_rule_reachable.pine
+to   C:\SMC_PROJECT\01_PINE\archive\smc_core_detector_L0_completion_rule_reachable_STAGE0_snapshot.pine
+
+STEP 2 — CREATE CLEAN PROJECT FOLDER
+Create folders if not exist:
+C:\SMC_PROJECT_CLEAN\01_PINE\core\
+C:\SMC_PROJECT_CLEAN\01_PINE\archive\
+C:\SMC_PROJECT_CLEAN\01_PINE\tasks_archive\
+C:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive\
+C:\SMC_PROJECT_CLEAN\01_PINE\donor_analysis\
+
+STEP 3 — SAVE TASK FILE
+Save to C:\SMC_PROJECT_CLEAN\01_PINE\tasks_archive\task_20250502_CLEAN00_baseline_init.txt
+Content: this full task text verbatim.
+
+STEP 4 — DONOR ANALYSIS
+Read C:\SMC_PROJECT\01_PINE\core\smc_core_detector_L0_completion_rule_reachable.pine fully.
+Extract and write to C:\SMC_PROJECT_CLEAN\01_PINE\donor_analysis\donor_analysis_CLEAN00.md:
+
+Section A — WHAT WORKS IN DONOR (keep ideas):
+- list every working mechanism: pivot detection, leg completion, ATR filter, sequence freeze, fib levels, rearm logic, next impulse handoff
+
+Section B — WHAT IS BROKEN (do not carry over):
+- list every legacy element: impulseEngineState, rearmNextImpulse, nextImpulse*, recency-only takeover, missing dominance check, missing role profile, missing finalFibLine*
+
+Section C — MISSING vs CANON (what canon requires but donor lacks):
+- role-based profile (POI/PRIMARY/CONFIRM TF)
+- stable takeover contract (structural valid + correction valid + dominance)
+- previous/current/next lifecycle
+- boundary event engine (next high/low vs previous high/low)
+- owner/rearm/recovery states
+
+STEP 5 — CREATE CLEAN BASE FILE
+Create C:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine with exactly this content:
+
+//@version=6
+indicator("SMC Clean Core L0", overlay=true, max_labels_count=50, max_lines_count=50)
+
+// PROFILE ENGINE
+string PROFILE_A        = "A"
+string PROFILE_B        = "B"
+string selectedProfile  = PROFILE_A
+string poiTf            = selectedProfile == PROFILE_A ? "240"  : "1440"
+string primaryTf        = selectedProfile == PROFILE_A ? "60"   : "240"
+string confirmTf        = selectedProfile == PROFILE_A ? "15"   : "60"
+string poiLabel         = selectedProfile == PROFILE_A ? "4H"   : "1D"
+string primaryLabel     = selectedProfile == PROFILE_A ? "1H"   : "4H"
+string confirmLabel     = selectedProfile == PROFILE_A ? "15m"  : "1H"
+
+// IMPULSE OBJECT — current
+var bool  impCurExists    = false
+var int   impCurDir       = 0
+var int   impCurStartBar  = na
+var int   impCurEndBar    = na
+var float impCurHi        = na
+var float impCurLo        = na
+var float impCurRange     = na
+var bool  impCurConfirmed = false
+
+// IMPULSE OBJECT — previous
+var bool  impPrevExists   = false
+var int   impPrevDir      = 0
+var int   impPrevStartBar = na
+var int   impPrevEndBar   = na
+var float impPrevHi       = na
+var float impPrevLo       = na
+var float impPrevRange    = na
+
+// IMPULSE OBJECT — pending (next candidate for ownership)
+var bool  impPendExists   = false
+var int   impPendDir      = 0
+var int   impPendStartBar = na
+var int   impPendEndBar   = na
+var float impPendHi       = na
+var float impPendLo       = na
+var float impPendRange    = na
+
+// OWNER STATE
+// OWNER_NONE / OWNER_CURRENT / OWNER_PREVIOUS / OWNER_PREVIOUS_AFTER_ROLLBACK
+var string ownerState = "OWNER_NONE"
+
+// PROOF LABEL
+var label proofLabel = na
+
+// GATE: compiles, no logic yet, no legacy
+// Next stage: CLEAN-02 Raw MTF Source Engine
+
+STEP 6 — SAVE ANALYSIS FILE
+Save to C:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive\analysis_20250502_CLEAN00_baseline_init.md:
+
+# CLEAN-00 Analysis
+
+## Active file state
+- file: smc_core_detector_L0_completion_rule_reachable.pine
+- state: STATE E (legacy engine present, no role profile, no finalFibLine*)
+- legacy present: impulseEngineState, rearmNextImpulse, nextImpulse*, recency-only takeover
+- role profile: ABSENT
+- dominance contract: ABSENT
+
+## Decision
+- do NOT repair old file
+- start clean rebuild in C:\SMC_PROJECT_CLEAN
+- donor ideas extracted to donor_analysis_CLEAN00.md
+
+## Next stage
+CLEAN-02 — Raw MTF Source Engine
+Add request.security for POI / PRIMARY / CONFIRM timeframes from profile.
+Gate: raw impulse data visible per TF, no owner assigned yet.
+
+STEP 7 — APPEND ACTION LOG
+Append to C:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive\codex_actions_log.txt:
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN00_baseline_init.txt
+PRE-ANALYSIS: donor_analysis_CLEAN00.md
+OUTPUT PINE: smc_clean_l0_core.pine
+ARCHIVED PINE: smc_core_detector_L0_completion_rule_reachable_STAGE0_snapshot.pine
+POST-ANALYSIS: analysis_20250502_CLEAN00_baseline_init.md
+RESULT: Clean project initialized. Donor analyzed. Base file created. No logic yet.
+
+STEP 8 — REPORT
+Reply with exactly:
+1. Snapshot archived: path
+2. Clean folders created: YES/NO
+3. Task saved: path
+4. Donor analysis saved: path
+5. Base pine created: path
+6. Analysis saved: path
+7. Action log updated: path
+8. Pine changed: NO
+9. Next stage: CLEAN-02 — Raw MTF Source Engine

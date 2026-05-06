@@ -1,0 +1,102 @@
+﻿//@version=6
+indicator("SMC Clean L0 Core — Profiles A/B", overlay=true, max_labels_count=50, max_lines_count=50)
+
+// ============================================================================
+// CLEAN-00 BASELINE
+// Purpose:
+// - clean project baseline only;
+// - explicit Profile A/B selection;
+// - no request.security;
+// - no legacy lifecycle;
+// - no owner logic;
+// - no break logic;
+// - no fib / OTE;
+// - no Candidate / Liquidity / Sweep / OB / Entry.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 1. PROFILE ENGINE — EXPLICIT PROFILES ONLY
+// ----------------------------------------------------------------------------
+const string PROFILE_A = "A"
+const string PROFILE_B = "B"
+
+string selectedProfile = input.string(PROFILE_A, "Профиль", options=[PROFILE_A, PROFILE_B])
+
+string profilePoiTimeframe = selectedProfile == PROFILE_A ? "240" : "D"
+string profilePrimaryTimeframe = selectedProfile == PROFILE_A ? "60" : "240"
+string profileConfirmTimeframe = selectedProfile == PROFILE_A ? "15" : "60"
+
+string profilePoiLabel = selectedProfile == PROFILE_A ? "4H" : "1D"
+string profilePrimaryLabel = selectedProfile == PROFILE_A ? "1H" : "4H"
+string profileConfirmLabel = selectedProfile == PROFILE_A ? "15m" : "1H"
+
+string profileLabel = selectedProfile == PROFILE_A ? "A: 4H POI -> 1H ОСН. -> 15m ПОДТВ." : "B: 1D POI -> 4H ОСН. -> 1H ПОДТВ."
+
+// ----------------------------------------------------------------------------
+// 2. EMPTY STATE PLACEHOLDERS — NO STRATEGY LOGIC YET
+// ----------------------------------------------------------------------------
+string poiState = "NONE"
+string primaryState = "NONE"
+string ownerState = "NONE"
+string breakState = "NONE"
+
+string previousImpulseState = "NONE"
+string currentImpulseState = "NONE"
+string nextImpulseState = "NONE"
+
+string edgeTakenState = "NONE"
+string eventScaleState = "NONE"
+
+// ----------------------------------------------------------------------------
+// 3. RU DISPLAY HELPERS — DISPLAY ONLY
+// ----------------------------------------------------------------------------
+f_ruState(string _state) =>
+    switch _state
+        "NONE" => "НЕТ"
+        "SEARCH" => "ПОИСК"
+        "REFERENCE" => "ОПОРНЫЙ"
+        "ACTIVE" => "АКТИВНЫЙ"
+        "LOCKED" => "ЗАФИКСИРОВАН"
+        "BROKEN" => "СЛОМАН"
+        "CURRENT" => "ТЕКУЩИЙ"
+        "PREVIOUS" => "ПРЕДЫДУЩИЙ"
+        "NEXT" => "СЛЕДУЮЩИЙ"
+        => _state
+
+// ----------------------------------------------------------------------------
+// 4. MINIMAL PROOF LABEL — BASELINE ONLY
+// ----------------------------------------------------------------------------
+var label proofLabel = na
+
+if barstate.islast
+    label.delete(proofLabel)
+
+    string proofText =
+         "CLEAN-00 BASELINE\n"
+       + "ПРОФИЛЬ: " + selectedProfile + "\n"
+       + "СВЯЗКА: " + profileLabel + "\n"
+       + "ТФ ГРАФИКА: " + timeframe.period + "\n"
+       + "ТФ POI: " + profilePoiLabel + " / " + profilePoiTimeframe + "\n"
+       + "ТФ ОСН.: " + profilePrimaryLabel + " / " + profilePrimaryTimeframe + "\n"
+       + "ТФ ПОДТВ.: " + profileConfirmLabel + " / " + profileConfirmTimeframe + "\n"
+       + "POI: " + f_ruState(poiState) + "\n"
+       + "PRIMARY: " + f_ruState(primaryState) + "\n"
+       + "OWNER: " + f_ruState(ownerState) + "\n"
+       + "BREAK: " + f_ruState(breakState) + "\n"
+       + "PREV IMP: " + f_ruState(previousImpulseState) + "\n"
+       + "CUR IMP: " + f_ruState(currentImpulseState) + "\n"
+       + "NEXT IMP: " + f_ruState(nextImpulseState) + "\n"
+       + "EDGE: " + f_ruState(edgeTakenState) + "\n"
+       + "EVENT: " + f_ruState(eventScaleState)
+
+    proofLabel := label.new(
+         x=bar_index,
+         y=high,
+         text=proofText,
+         xloc=xloc.bar_index,
+         yloc=yloc.price,
+         style=label.style_label_left,
+         textcolor=color.white,
+         color=color.new(color.black, 72),
+         size=size.small
+    )

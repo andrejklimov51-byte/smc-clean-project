@@ -1,0 +1,456 @@
+//@version=6
+indicator("SMC Clean Core L0", overlay=true, max_labels_count=50, max_lines_count=50)
+
+// PROFILE ENGINE
+string PROFILE_A        = "A"
+string PROFILE_B        = "B"
+string selectedProfile  = PROFILE_A
+string poiTf            = selectedProfile == PROFILE_A ? "240"  : "1440"
+string primaryTf        = selectedProfile == PROFILE_A ? "60"   : "240"
+string confirmTf        = selectedProfile == PROFILE_A ? "15"   : "60"
+string poiLabel         = selectedProfile == PROFILE_A ? "4H"   : "1D"
+string primaryLabel     = selectedProfile == PROFILE_A ? "1H"   : "4H"
+string confirmLabel     = selectedProfile == PROFILE_A ? "15m"  : "1H"
+
+// ============================================================
+// RAW MTF SOURCE ENGINE
+// Только получение сырых данных с нужных TF.
+// raw != owner, raw != POI, raw != primary
+// ============================================================
+
+// POI TF raw OHLC
+poiOpen  = request.security(syminfo.tickerid, poiTf, open,  lookahead=barmerge.lookahead_off)
+poiHigh  = request.security(syminfo.tickerid, poiTf, high,  lookahead=barmerge.lookahead_off)
+poiLow   = request.security(syminfo.tickerid, poiTf, low,   lookahead=barmerge.lookahead_off)
+poiClose = request.security(syminfo.tickerid, poiTf, close, lookahead=barmerge.lookahead_off)
+
+// PRIMARY TF raw OHLC
+primOpen  = request.security(syminfo.tickerid, primaryTf, open,  lookahead=barmerge.lookahead_off)
+primHigh  = request.security(syminfo.tickerid, primaryTf, high,  lookahead=barmerge.lookahead_off)
+primLow   = request.security(syminfo.tickerid, primaryTf, low,   lookahead=barmerge.lookahead_off)
+primClose = request.security(syminfo.tickerid, primaryTf, close, lookahead=barmerge.lookahead_off)
+
+// CONFIRM TF raw OHLC
+confOpen  = request.security(syminfo.tickerid, confirmTf, open,  lookahead=barmerge.lookahead_off)
+confHigh  = request.security(syminfo.tickerid, confirmTf, high,  lookahead=barmerge.lookahead_off)
+confLow   = request.security(syminfo.tickerid, confirmTf, low,   lookahead=barmerge.lookahead_off)
+confClose = request.security(syminfo.tickerid, confirmTf, close, lookahead=barmerge.lookahead_off)
+
+// GATE: raw данные получены, owner не назначен
+
+// ============================================================
+// IMPULSE OBJECT ENGINE — PRIMARY TF
+// Основа: ta.pivothigh / ta.pivotlow с задержкой pivotLen баров
+// Три freeze-условия из донора: higher-low + ATR gate + sequence counter
+// raw impulse candidate → не owner, не POI, не confirmed
+// ============================================================
+
+const int pivotLen = 5
+
+// Pivot detection на PRIMARY TF
+float primPivHigh = request.security(syminfo.tickerid, primaryTf, ta.pivothigh(high, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float primPivLow  = request.security(syminfo.tickerid, primaryTf, ta.pivotlow(low,  pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+
+bool primNewPivHigh = not na(primPivHigh)
+bool primNewPivLow  = not na(primPivLow)
+
+// Impulse leg candidate — PRIMARY TF
+var float primLegBasePrice = na
+var float primLegTermPrice = na
+var int   primLegDir       = 0    // 1=bull -1=bear
+var bool  primLegExists    = false
+
+// Bull leg: base=pivotLow → terminal=pivotHigh
+if primNewPivLow
+    primLegBasePrice := primPivLow
+    primLegDir       := 1
+    primLegExists    := true
+
+// Bear leg: base=pivotHigh → terminal=pivotLow
+if primNewPivHigh
+    primLegBasePrice := primPivHigh
+    primLegDir       := -1
+    primLegExists    := true
+
+// Terminal — последний экстремум в направлении ноги
+var float primLegTerminal = na
+if primLegDir == 1 and primNewPivHigh
+    primLegTerminal := primPivHigh
+if primLegDir == -1 and primNewPivLow
+    primLegTerminal := primPivLow
+
+// Leg range
+float primLegRange = primLegExists and not na(primLegTerminal) ? math.abs(primLegTerminal - primLegBasePrice) : na
+
+// ATR gate — шумозащита (из донора)
+float primAtr = request.security(syminfo.tickerid, primaryTf, ta.atr(14), lookahead=barmerge.lookahead_off)
+bool  primLegAboveAtr = not na(primLegRange) and primLegRange > primAtr
+
+// Retrace >= 0.5 — confirmation rule
+var float primRetrace = na
+if primLegExists and not na(primLegTerminal) and not na(primLegBasePrice)
+    primRetrace := primLegDir == 1 ? (primLegTerminal - close) / primLegRange :
+                                     (close - primLegTerminal) / primLegRange
+
+bool primLegConfirmed = not na(primRetrace) and primRetrace >= 0.5 and primLegAboveAtr
+
+// GATE: объект ноги существует, confirmation rule применена
+
+// OWNER STATE: OWNER_NONE / OWNER_CURRENT / OWNER_PREVIOUS / OWNER_ROLLBACK
+var string ownerState = "OWNER_NONE"
+
+// ============================================================
+// IMPULSE LIFECYCLE ENGINE
+// previous / current / next — три состояния
+// Takeover contract: structural valid + correction valid + dominance
+// Новый импульс получает ownership ТОЛЬКО если доминирует над текущим
+// later-by-time alone = недостаточно
+// ============================================================
+
+// CURRENT active impulse
+var float  curImpBase      = na
+var float  curImpTerminal  = na
+var int    curImpDir       = 0
+var float  curImpRange     = na
+var bool   curImpConfirmed = false
+
+// PREVIOUS confirmed impulse (reference, не исчезает)
+var float  prevImpBase     = na
+var float  prevImpTerminal = na
+var int    prevImpDir      = 0
+var float  prevImpRange    = na
+
+// PENDING impulse (кандидат на ownership, ещё не владелец)
+var float  pendImpBase      = na
+var float  pendImpTerminal  = na
+var int    pendImpDir       = 0
+var float  pendImpRange     = na
+var bool   pendImpConfirmed = false
+
+// DOMINANCE FACTOR — новый импульс должен превышать текущий по range
+const float DOMINANCE_FACTOR = 0.75
+
+// Обновление pending из текущей ноги PRIMARY TF
+if primLegExists and not na(primLegTerminal) and not na(primLegRange)
+    pendImpBase      := primLegBasePrice
+    pendImpTerminal  := primLegTerminal
+    pendImpDir       := primLegDir
+    pendImpRange     := primLegRange
+    pendImpConfirmed := primLegConfirmed
+
+// TAKEOVER CONTRACT
+// Новый pending получает ownership если:
+// 1. structural valid (нога существует)
+// 2. correction valid (retrace >= 0.5 подтверждён)
+// 3. dominance (range pending > range current * DOMINANCE_FACTOR)
+bool takeoverAllowed = pendImpConfirmed and
+     not na(pendImpRange) and
+     (na(curImpRange) or pendImpRange > curImpRange * DOMINANCE_FACTOR)
+
+if takeoverAllowed
+    // сохранить текущий как previous
+    prevImpBase     := curImpBase
+    prevImpTerminal := curImpTerminal
+    prevImpDir      := curImpDir
+    prevImpRange    := curImpRange
+    // pending становится current
+    curImpBase      := pendImpBase
+    curImpTerminal  := pendImpTerminal
+    curImpDir       := pendImpDir
+    curImpRange     := pendImpRange
+    curImpConfirmed := true
+    ownerState      := "OWNER_CURRENT"
+
+// Если current существует но не confirmed — owner none
+if not curImpConfirmed
+    ownerState := "OWNER_NONE"
+
+// GATE: lifecycle работает, takeover contract применён
+// later-by-time не ворует ownership без dominance
+
+// ============================================================
+// BOUNDARY EVENT ENGINE
+// Сравнение экстремумов: current vs previous
+// Слом структуры = когда следующий импульс пробивает high/low предыдущего
+// 0.79 не является границей слома — только high/low импульса
+// ============================================================
+
+// События
+string TAKE_HIGH    = "TAKE_HIGH"
+string TAKE_LOW     = "TAKE_LOW"
+string INSIDE_RANGE = "INSIDE_RANGE"
+string NO_EVENT     = "NO_EVENT"
+
+// Текущее boundary событие
+var string boundaryEvent = "NO_EVENT"
+
+// Классификация события
+// Используем curImp и prevImp из lifecycle engine
+bool prevExists = not na(prevImpBase) and not na(prevImpTerminal)
+bool curExists  = not na(curImpBase)  and not na(curImpTerminal)
+
+if prevExists and curExists
+    float prevHi = math.max(prevImpBase, prevImpTerminal)
+    float prevLo = math.min(prevImpBase, prevImpTerminal)
+    float curHi  = math.max(curImpBase,  curImpTerminal)
+    float curLo  = math.min(curImpBase,  curImpTerminal)
+
+    if curHi > prevHi
+        boundaryEvent := TAKE_HIGH
+    else if curLo < prevLo
+        boundaryEvent := TAKE_LOW
+    else if curHi <= prevHi and curLo >= prevLo
+        boundaryEvent := INSIDE_RANGE
+    else
+        boundaryEvent := NO_EVENT
+else
+    boundaryEvent := NO_EVENT
+
+// Классификация структурного события
+// continuation: current bullish + TAKE_HIGH или current bearish + TAKE_LOW
+// structure_break: current bullish + TAKE_LOW или current bearish + TAKE_HIGH
+// internal: INSIDE_RANGE
+var string structureEvent = "NONE"
+
+if boundaryEvent == TAKE_HIGH
+    structureEvent := curImpDir == 1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if boundaryEvent == TAKE_LOW
+    structureEvent := curImpDir == -1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if boundaryEvent == INSIDE_RANGE
+    structureEvent := "INTERNAL"
+else
+    structureEvent := "NONE"
+
+// GATE: boundary event определён через high/low импульсов
+// 0.79 не участвует в определении слома
+
+// ============================================================
+// POI CONTEXT ENGINE
+// POI = accepted старший импульс (POI TF) как контекст
+// POI != raw latest HTF impulse
+// POI может быть сломан и заменён новым
+// WAIT_NEW_POI не является тупиком
+// ============================================================
+
+// POI States
+string POI_NONE     = "POI_NONE"
+string POI_SEARCH   = "POI_SEARCH"
+string POI_ACTIVE   = "POI_ACTIVE"
+string POI_BROKEN   = "POI_BROKEN"
+string POI_STALE    = "POI_STALE"
+string POI_REPLACED = "POI_REPLACED"
+
+var string poiState = "POI_NONE"
+
+// POI object — accepted senior impulse
+var float  poiBase      = na
+var float  poiTerminal  = na
+var int    poiDir       = 0
+var float  poiRange     = na
+var float  poiHi        = na
+var float  poiLo        = na
+
+// Pivot detection на POI TF
+float poiPivHigh = request.security(syminfo.tickerid, poiTf, ta.pivothigh(high, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float poiPivLow  = request.security(syminfo.tickerid, poiTf, ta.pivotlow(low,  pivotLen, pivotLen),  lookahead=barmerge.lookahead_off)
+float poiAtr     = request.security(syminfo.tickerid, poiTf, ta.atr(14), lookahead=barmerge.lookahead_off)
+
+bool poiNewPivHigh = not na(poiPivHigh)
+bool poiNewPivLow  = not na(poiPivLow)
+
+// Raw POI leg candidate
+var float poiRawBase     = na
+var float poiRawTerminal = na
+var int   poiRawDir      = 0
+var float poiRawRange    = na
+
+if poiNewPivLow
+    poiRawBase := poiPivLow
+    poiRawDir  := 1
+
+if poiNewPivHigh
+    poiRawBase := poiPivHigh
+    poiRawDir  := -1
+
+if poiRawDir == 1 and poiNewPivHigh
+    poiRawTerminal := poiPivHigh
+    poiRawRange    := math.abs(poiRawTerminal - poiRawBase)
+
+if poiRawDir == -1 and poiNewPivLow
+    poiRawTerminal := poiPivLow
+    poiRawRange    := math.abs(poiRawTerminal - poiRawBase)
+
+// POI retrace check
+var float poiRetrace = na
+if not na(poiRawRange) and poiRawRange > 0 and not na(poiRawTerminal) and not na(poiRawBase)
+    poiRetrace := poiRawDir == 1 ?
+         (poiRawTerminal - close) / poiRawRange :
+         (close - poiRawTerminal) / poiRawRange
+
+bool poiRawConfirmed = not na(poiRetrace) and poiRetrace >= 0.5 and
+     not na(poiRawRange) and poiRawRange > poiAtr
+
+// POI TF boundary event — отдельный от PRIMARY TF
+var float  poiPrevHi        = na
+var float  poiPrevLo        = na
+var string poiBoundaryEvent = "NO_EVENT"
+
+if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
+    poiPrevHi := poiHi
+    poiPrevLo := poiLo
+
+if not na(poiRawTerminal) and not na(poiRawBase)
+    float newPoiHi = math.max(poiRawBase, poiRawTerminal)
+    float newPoiLo = math.min(poiRawBase, poiRawTerminal)
+    if not na(poiPrevHi) and not na(poiPrevLo)
+        if newPoiHi > poiPrevHi
+            poiBoundaryEvent := "TAKE_HIGH"
+        else if newPoiLo < poiPrevLo
+            poiBoundaryEvent := "TAKE_LOW"
+        else
+            poiBoundaryEvent := "INSIDE_RANGE"
+    else
+        poiBoundaryEvent := "NO_EVENT"
+
+// POI structure break теперь через poiBoundaryEvent а не structureEvent
+string poiStructureEvent = "NONE"
+if poiBoundaryEvent == "TAKE_HIGH"
+    poiStructureEvent := poiDir == 1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if poiBoundaryEvent == "TAKE_LOW"
+    poiStructureEvent := poiDir == -1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if poiBoundaryEvent == "INSIDE_RANGE"
+    poiStructureEvent := "INTERNAL"
+
+// POI state machine
+if poiState == POI_NONE or poiState == POI_SEARCH
+    if poiRawConfirmed
+        poiBase     := poiRawBase
+        poiTerminal := poiRawTerminal
+        poiDir      := poiRawDir
+        poiRange    := poiRawRange
+        poiHi       := math.max(poiBase, poiTerminal)
+        poiLo       := math.min(poiBase, poiTerminal)
+        poiState    := POI_ACTIVE
+
+// POI broken: через poiBoundaryEvent (POI TF), не через structureEvent (PRIMARY TF)
+if poiState == POI_ACTIVE and poiStructureEvent == "STRUCTURE_BREAK"
+    poiState := POI_BROKEN
+
+// POI_STALE: цена ушла далеко за POI без слома
+if poiState == POI_ACTIVE
+    bool poiPriceAbove = poiDir == 1  and close > poiHi * 1.02
+    bool poiPriceBelow = poiDir == -1 and close < poiLo * 0.98
+    if poiPriceAbove or poiPriceBelow
+        poiState := POI_STALE
+
+// Stale POI заменяется новым подтверждённым импульсом
+if poiState == POI_STALE and poiRawConfirmed
+    poiBase     := poiRawBase
+    poiTerminal := poiRawTerminal
+    poiDir      := poiRawDir
+    poiRange    := poiRawRange
+    poiHi       := math.max(poiBase, poiTerminal)
+    poiLo       := math.min(poiBase, poiTerminal)
+    poiState    := POI_ACTIVE
+
+// Broken POI может быть заменён новым
+if poiState == POI_BROKEN and poiRawConfirmed
+    poiBase     := poiRawBase
+    poiTerminal := poiRawTerminal
+    poiDir      := poiRawDir
+    poiRange    := poiRawRange
+    poiHi       := math.max(poiBase, poiTerminal)
+    poiLo       := math.min(poiBase, poiTerminal)
+    poiState    := POI_REPLACED
+
+// После REPLACED → снова ACTIVE
+if poiState == POI_REPLACED
+    poiState := POI_ACTIVE
+
+// GATE: POI context engine исправлен
+// POI broken через POI TF boundary event, POI_STALE активирован
+
+// ============================================================
+// PRIMARY OWNERSHIP ENGINE
+// Primary = accepted рабочий impulse внутри valid POI
+// Primary не создаётся из fib, не из break, не из display TF
+// Primary ищется только если poiState == POI_ACTIVE
+// ============================================================
+
+// PRIMARY states
+string PRIMARY_NONE      = "PRIMARY_NONE"
+string PRIMARY_SEARCH    = "PRIMARY_SEARCH"
+string PRIMARY_CANDIDATE = "PRIMARY_CANDIDATE"
+string PRIMARY_LOCKED    = "PRIMARY_LOCKED"
+string PRIMARY_BROKEN    = "PRIMARY_BROKEN"
+string PRIMARY_REPLACED  = "PRIMARY_REPLACED"
+
+var string primaryState = "PRIMARY_NONE"
+
+// Primary object
+var float  primOwnerBase     = na
+var float  primOwnerTerminal = na
+var int    primOwnerDir      = 0
+var float  primOwnerRange    = na
+var float  primOwnerHi       = na
+var float  primOwnerLo       = na
+
+// Primary search разрешён только внутри valid POI
+bool poiValid = poiState == POI_ACTIVE
+
+// Primary candidate — из lifecycle engine (curImp после takeover)
+bool primCandidateReady = poiValid and
+     curImpConfirmed and
+     not na(curImpBase) and
+     not na(curImpTerminal) and
+     not na(curImpRange)
+
+// Проверка: primary candidate находится внутри POI boundaries
+bool primInsidePoi = false
+if primCandidateReady and not na(poiHi) and not na(poiLo)
+    float candHi = math.max(curImpBase, curImpTerminal)
+    float candLo = math.min(curImpBase, curImpTerminal)
+    primInsidePoi := candHi <= poiHi * 1.01 and candLo >= poiLo * 0.99
+
+// Primary state machine
+if primaryState == PRIMARY_NONE or primaryState == PRIMARY_SEARCH
+    if primCandidateReady and primInsidePoi
+        primaryState := PRIMARY_CANDIDATE
+
+if primaryState == PRIMARY_CANDIDATE
+    primaryState      := PRIMARY_LOCKED
+    primOwnerBase     := curImpBase
+    primOwnerTerminal := curImpTerminal
+    primOwnerDir      := curImpDir
+    primOwnerRange    := curImpRange
+    primOwnerHi       := math.max(primOwnerBase, primOwnerTerminal)
+    primOwnerLo       := math.min(primOwnerBase, primOwnerTerminal)
+
+// Primary broken: structureEvent == STRUCTURE_BREAK на PRIMARY TF
+if primaryState == PRIMARY_LOCKED and structureEvent == "STRUCTURE_BREAK"
+    primaryState := PRIMARY_BROKEN
+
+// POI невалиден — primary тоже теряет смысл
+if not poiValid and primaryState == PRIMARY_LOCKED
+    primaryState := PRIMARY_BROKEN
+
+// Primary replaced: новый confirmed impulse внутри того же POI
+if primaryState == PRIMARY_BROKEN and primCandidateReady and primInsidePoi
+    primOwnerBase     := curImpBase
+    primOwnerTerminal := curImpTerminal
+    primOwnerDir      := curImpDir
+    primOwnerRange    := curImpRange
+    primOwnerHi       := math.max(primOwnerBase, primOwnerTerminal)
+    primOwnerLo       := math.min(primOwnerBase, primOwnerTerminal)
+    primaryState      := PRIMARY_LOCKED
+
+// GATE: primary ownership engine работает
+// primary только внутри valid POI
+// primary не создаётся из fib или display TF
+// Next stage: CLEAN-08 Fib / OTE Engine
+
+// PROOF LABEL
+var label proofLabel = na
+
+// GATE: compiles, no logic yet, no legacy
+// Next stage: CLEAN-02 Raw MTF Source Engine

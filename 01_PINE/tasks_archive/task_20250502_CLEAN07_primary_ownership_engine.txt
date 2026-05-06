@@ -1,0 +1,31 @@
+ЯЗЫК ОБЩЕНИЯ: только русский.
+
+[SMC CANON]
+primary impulse → fib / OTE → candidate in OTE → confirmations → OB → correction → IDM → trade
+no lower layer before upper proven
+code YES / chart NO = code WRONG
+
+[CRITICAL CONDITIONS]
+- один узел = одно решение
+- BEFORE архив обязателен до любого изменения кода
+- AFTER архив обязателен после изменения
+- action log обновляется после каждого этапа
+- STOP on conflict
+
+[SCOPE]
+Layer: 0 — Primary Impulse
+Node: SINGLE — Primary Ownership Engine
++ исправление двух замечаний CLEAN-06 перед добавлением нового функционала
+
+---
+
+CLEAN-07 — PRIMARY OWNERSHIP ENGINE
+STEP 1 — BEFORE ARCHIVE
+STEP 2 — TASK FILE
+STEP 3 — ПРОЧИТАЙ CORE, НАЙДИ СТРОКИ
+STEP 4 — ИСПРАВЬ ЗАМЕЧАНИЯ CLEAN-06 (poiBoundaryEvent + POI_STALE)
+STEP 5 — ДОБАВЬ PRIMARY OWNERSHIP ENGINE
+STEP 6 — AFTER ARCHIVE
+STEP 7 — ANALYSIS
+STEP 8 — ACTION LOG
+STEP 9 — ОТЧЁТ

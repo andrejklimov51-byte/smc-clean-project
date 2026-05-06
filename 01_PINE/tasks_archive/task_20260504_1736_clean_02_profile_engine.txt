@@ -1,0 +1,115 @@
+ULTRA CONTROL ACTIVE — FOLLOW SMC_ULTRA_CONTROL_MASTER.md
+
+[CURRENT TASK NODE]
+
+CLEAN-02:
+
+PROFILE ENGINE HARDENING — PROFILES A/B ONLY / NO MTF DATA YET
+
+[ROOT PATH]
+
+Clean rebuild root:
+
+D:\SMC_PROJECT_CLEAN
+
+[GOAL]
+
+Укрепить и формально закрыть Profile Engine для clean rebuild.
+
+Разрешены только два профиля:
+
+PROFILE A:
+- POI TF = 4H / 240
+- PRIMARY TF = 1H / 60
+- CONFIRM TF = 15m / 15
+
+PROFILE B:
+- POI TF = 1D / D
+- PRIMARY TF = 4H / 240
+- CONFIRM TF = 1H / 60
+
+Код можно менять только в пределах Profile Engine и proof-label.
+
+Запрещено:
+- request.security
+- raw MTF source engine
+- impulse logic
+- previous/current/next lifecycle
+- rearm
+- promotion
+- rollback
+- POI / primary / break / owner / fib / protected logic
+- Candidate / Liquidity / Sweep / OB / Entry
+- chart-dependent MTF map
+
+[REQUIRED PROFILE FIELDS]
+
+const string PROFILE_A = "A"
+const string PROFILE_B = "B"
+
+string selectedProfile = input.string(PROFILE_A, "Профиль", options=[PROFILE_A, PROFILE_B])
+
+bool isProfileA = selectedProfile == PROFILE_A
+bool isProfileB = selectedProfile == PROFILE_B
+
+string profileId =
+     isProfileA ? "PROFILE_A" :
+     isProfileB ? "PROFILE_B" :
+     "PROFILE_INVALID"
+
+string profileLabel =
+     isProfileA ? "A: 4H POI -> 1H ОСН. -> 15m ПОДТВ." :
+     isProfileB ? "B: 1D POI -> 4H ОСН. -> 1H ПОДТВ." :
+     "INVALID PROFILE"
+
+string profilePoiTimeframe =
+     isProfileA ? "240" :
+     isProfileB ? "D" :
+     ""
+
+string profilePrimaryTimeframe =
+     isProfileA ? "60" :
+     isProfileB ? "240" :
+     ""
+
+string profileConfirmTimeframe =
+     isProfileA ? "15" :
+     isProfileB ? "60" :
+     ""
+
+string profilePoiLabel =
+     isProfileA ? "4H" :
+     isProfileB ? "1D" :
+     "INVALID"
+
+string profilePrimaryLabel =
+     isProfileA ? "1H" :
+     isProfileB ? "4H" :
+     "INVALID"
+
+string profileConfirmLabel =
+     isProfileA ? "15m" :
+     isProfileB ? "1H" :
+     "INVALID"
+
+bool profileValid = isProfileA or isProfileB
+
+string displayTimeframe = timeframe.period
+
+[PROOF LABEL]
+
+Proof-label must show:
+- CLEAN-02 PROFILE ENGINE
+- ПРОФИЛЬ
+- СВЯЗКА
+- ТФ ГРАФИКА
+- ТФ POI
+- ТФ ОСН.
+- ТФ ПОДТВ.
+- PROFILE VALID
+- DISPLAY TF USED FOR LOGIC
+- empty placeholder states only
+
+[FINAL RESPONSE]
+
+Report only the requested archive/task/analysis paths and profile-engine hardening results.

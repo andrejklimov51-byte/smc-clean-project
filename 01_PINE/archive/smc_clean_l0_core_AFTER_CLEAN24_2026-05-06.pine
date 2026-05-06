@@ -1,0 +1,771 @@
+//@version=6
+indicator("SMC Clean Core L0", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// ============================================================
+// PROFILE ENGINE — AUTO по display TF
+// ============================================================
+const string PROFILE_A = "A"
+const string PROFILE_B = "B"
+
+string selectedProfile = timeframe.period == "15" or
+     timeframe.period == "60" ? PROFILE_A : PROFILE_B
+
+string poiTf      = selectedProfile == PROFILE_A ? "240"  : "1440"
+string primaryTf  = selectedProfile == PROFILE_A ? "60"   : "240"
+string confirmTf  = selectedProfile == PROFILE_A ? "15"   : "60"
+string poiLabel   = selectedProfile == PROFILE_A ? "4H"   : "1D"
+string primaryLabel = selectedProfile == PROFILE_A ? "1H"  : "4H"
+string confirmLabel = selectedProfile == PROFILE_A ? "15m" : "1H"
+
+// ============================================================
+// RAW MTF SOURCE ENGINE
+// ============================================================
+poiOpen  = request.security(syminfo.tickerid, poiTf, open,  lookahead=barmerge.lookahead_off)
+poiHigh  = request.security(syminfo.tickerid, poiTf, high,  lookahead=barmerge.lookahead_off)
+poiLow   = request.security(syminfo.tickerid, poiTf, low,   lookahead=barmerge.lookahead_off)
+poiClose = request.security(syminfo.tickerid, poiTf, close, lookahead=barmerge.lookahead_off)
+
+primOpen  = request.security(syminfo.tickerid, primaryTf, open,  lookahead=barmerge.lookahead_off)
+primHigh  = request.security(syminfo.tickerid, primaryTf, high,  lookahead=barmerge.lookahead_off)
+primLow   = request.security(syminfo.tickerid, primaryTf, low,   lookahead=barmerge.lookahead_off)
+primClose = request.security(syminfo.tickerid, primaryTf, close, lookahead=barmerge.lookahead_off)
+
+confOpen  = request.security(syminfo.tickerid, confirmTf, open,  lookahead=barmerge.lookahead_off)
+confHigh  = request.security(syminfo.tickerid, confirmTf, high,  lookahead=barmerge.lookahead_off)
+confLow   = request.security(syminfo.tickerid, confirmTf, low,   lookahead=barmerge.lookahead_off)
+confClose = request.security(syminfo.tickerid, confirmTf, close, lookahead=barmerge.lookahead_off)
+
+// ============================================================
+// IMPULSE DETECTION ENGINE — донорский completion rule (CLEAN-21)
+// Inline через request.security для POI TF и PRIMARY TF
+// ============================================================
+
+const int pivotLen = 5
+
+// --- PRIMARY TF impulse detection ---
+float primPivLowSec  = request.security(syminfo.tickerid, primaryTf,
+     ta.pivotlow(low, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float primPivHighSec = request.security(syminfo.tickerid, primaryTf,
+     ta.pivothigh(high, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float primAtrSec     = request.security(syminfo.tickerid, primaryTf,
+     ta.atr(14), lookahead=barmerge.lookahead_off)
+float primHighSec    = request.security(syminfo.tickerid, primaryTf,
+     high, lookahead=barmerge.lookahead_off)
+float primLowSec     = request.security(syminfo.tickerid, primaryTf,
+     low, lookahead=barmerge.lookahead_off)
+float primCloseSec   = request.security(syminfo.tickerid, primaryTf,
+     close, lookahead=barmerge.lookahead_off)
+float primOpenSec    = request.security(syminfo.tickerid, primaryTf,
+     open, lookahead=barmerge.lookahead_off)
+
+bool primNewPivLow  = not na(primPivLowSec)
+bool primNewPivHigh = not na(primPivHighSec)
+
+var float primBullBase     = na
+var float primBullTerminal = na
+var int   primBullTermBar  = na
+var float primBullPostLow  = na
+var int   primBullBearSeq  = 0
+
+var float primBearBase     = na
+var float primBearTerminal = na
+var int   primBearTermBar  = na
+var float primBearPostHigh = na
+var int   primBearBullSeq  = 0
+
+float primMinPullback = primAtrSec * 0.15
+
+if not na(primBullTermBar) and bar_index > primBullTermBar
+    if primCloseSec < primOpenSec
+        primBullBearSeq := primBullBearSeq + 1
+    primBullPostLow := na(primBullPostLow) ? primLowSec : math.min(primBullPostLow, primLowSec)
+
+if not na(primBearTermBar) and bar_index > primBearTermBar
+    if primCloseSec > primOpenSec
+        primBearBullSeq := primBearBullSeq + 1
+    primBearPostHigh := na(primBearPostHigh) ? primHighSec : math.max(primBearPostHigh, primHighSec)
+
+bool primBullSmallPullback = not na(primBullPostLow) and not na(primBullTerminal) and
+     primBullTerminal - primBullPostLow > primMinPullback
+bool primBearSmallBounce   = not na(primBearPostHigh) and not na(primBearTerminal) and
+     primBearPostHigh - primBearTerminal > primMinPullback
+
+var float primCompletedLow   = na
+var float primCompletedHigh  = na
+var int   primCompletedDir   = 0
+var float primCompletedRange = na
+var bool  primCompletedNow   = false
+
+primCompletedNow := false
+
+bool primBullSeqFreeze = not na(primBullBase) and not na(primBullTerminal) and
+     primBullTerminal > primBullBase and
+     primBullSmallPullback and primBullBearSeq >= 2
+if primBullSeqFreeze
+    primCompletedNow   := true
+    primCompletedLow   := primBullBase
+    primCompletedHigh  := primBullTerminal
+    primCompletedDir   := 1
+    primCompletedRange := primBullTerminal - primBullBase
+    primPendStartBar   := primBullTermBar - 1
+    primPendTermBar    := primBullTermBar
+
+bool primBearSeqFreeze = not na(primBearBase) and not na(primBearTerminal) and
+     primBearBase > primBearTerminal and
+     primBearSmallBounce and primBearBullSeq >= 2
+if primBearSeqFreeze
+    if not primCompletedNow or primBearTermBar > primBullTermBar
+        primCompletedNow   := true
+        primCompletedLow   := primBearTerminal
+        primCompletedHigh  := primBearBase
+        primCompletedDir   := -1
+        primCompletedRange := primBearBase - primBearTerminal
+        primPendStartBar   := primBearTermBar - 1
+        primPendTermBar    := primBearTermBar
+
+if primNewPivHigh
+    bool primBullLowerHigh = not na(primBullBase) and not na(primBullTermBar) and
+         primPivHighSec < primBullTerminal and primBullSmallPullback
+    if primBullLowerHigh and primBullTerminal > primBullBase
+        primCompletedNow   := true
+        primCompletedLow   := primBullBase
+        primCompletedHigh  := primBullTerminal
+        primCompletedDir   := 1
+        primCompletedRange := primBullTerminal - primBullBase
+        primPendStartBar   := primBullTermBar - 1
+        primPendTermBar    := primBullTermBar
+    primBearBase     := primPivHighSec
+    primBearTerminal := na
+    primBearTermBar  := na
+    primBearPostHigh := na
+    primBearBullSeq  := 0
+    if not na(primBullBase)
+        if na(primBullTerminal) or primPivHighSec > primBullTerminal
+            primBullTerminal := primPivHighSec
+            primBullTermBar  := bar_index
+            primBullPostLow  := na
+            primBullBearSeq  := 0
+
+if primNewPivLow
+    bool primBearHigherLow = not na(primBearBase) and not na(primBearTermBar) and
+         primPivLowSec > primBearTerminal and primBearSmallBounce
+    if primBearHigherLow and primBearBase > primBearTerminal
+        if not primCompletedNow or primBearTermBar > primBullTermBar
+            primCompletedNow   := true
+            primCompletedLow   := primBearTerminal
+            primCompletedHigh  := primBearBase
+            primCompletedDir   := -1
+            primCompletedRange := primBearBase - primBearTerminal
+            primPendStartBar   := primBearTermBar - 1
+            primPendTermBar    := primBearTermBar
+    primBullBase     := primPivLowSec
+    primBullTerminal := na
+    primBullTermBar  := na
+    primBullPostLow  := na
+    primBullBearSeq  := 0
+    if not na(primBearBase)
+        if na(primBearTerminal) or primPivLowSec < primBearTerminal
+            primBearTerminal := primPivLowSec
+            primBearTermBar  := bar_index
+            primBearPostHigh := na
+            primBearBullSeq  := 0
+
+var float primPendLow      = na
+var float primPendHigh     = na
+var int   primPendDir      = 0
+var float primPendRange    = na
+var int   primPendStartBar = na
+var int   primPendTermBar  = na
+var bool  primOwnerConfirmed = false
+var float primOwnerLow  = na
+var float primOwnerHigh = na
+var int   primOwnerDir  = 0
+var float primOwnerRng  = na
+
+if primCompletedNow and primCompletedRange > syminfo.mintick
+    primPendLow          := primCompletedLow
+    primPendHigh         := primCompletedHigh
+    primPendDir          := primCompletedDir
+    primPendRange        := primCompletedRange
+    primOwnerConfirmed   := false
+
+if not primOwnerConfirmed and not na(primPendRange) and primPendRange > 0
+    float primRet = primPendDir == 1 ?
+         (primPendHigh - primCloseSec) / primPendRange :
+         (primCloseSec - primPendLow)  / primPendRange
+    if primRet >= 0.5
+        primOwnerLow       := primPendLow
+        primOwnerHigh      := primPendHigh
+        primOwnerDir       := primPendDir
+        primOwnerRng       := primPendRange
+        primOwnerConfirmed := true
+
+float primLegBasePrice = primOwnerDir == 1 ? primOwnerLow  : primOwnerHigh
+float primLegTerminal  = primOwnerDir == 1 ? primOwnerHigh : primOwnerLow
+int   primLegDirV      = primOwnerDir
+float primLegRange     = primOwnerRng
+bool  primLegConfirmed = primOwnerConfirmed
+bool  primLegExists    = primOwnerConfirmed
+
+// --- POI TF impulse detection ---
+float poiPivLowSec  = request.security(syminfo.tickerid, poiTf,
+     ta.pivotlow(low, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float poiPivHighSec = request.security(syminfo.tickerid, poiTf,
+     ta.pivothigh(high, pivotLen, pivotLen), lookahead=barmerge.lookahead_off)
+float poiAtrSec     = request.security(syminfo.tickerid, poiTf,
+     ta.atr(14), lookahead=barmerge.lookahead_off)
+float poiHighSec    = request.security(syminfo.tickerid, poiTf,
+     high, lookahead=barmerge.lookahead_off)
+float poiLowSec     = request.security(syminfo.tickerid, poiTf,
+     low, lookahead=barmerge.lookahead_off)
+float poiCloseSec   = request.security(syminfo.tickerid, poiTf,
+     close, lookahead=barmerge.lookahead_off)
+float poiOpenSec    = request.security(syminfo.tickerid, poiTf,
+     open, lookahead=barmerge.lookahead_off)
+
+bool poiNewPivLow  = not na(poiPivLowSec)
+bool poiNewPivHigh = not na(poiPivHighSec)
+
+var float poiBullBase     = na
+var float poiBullTerminal = na
+var int   poiBullTermBar  = na
+var float poiBullPostLow  = na
+var int   poiBullBearSeq  = 0
+
+var float poiBearBase     = na
+var float poiBearTerminal = na
+var int   poiBearTermBar  = na
+var float poiBearPostHigh = na
+var int   poiBearBullSeq  = 0
+
+float poiMinPullback = poiAtrSec * 0.15
+
+if not na(poiBullTermBar) and bar_index > poiBullTermBar
+    if poiCloseSec < poiOpenSec
+        poiBullBearSeq := poiBullBearSeq + 1
+    poiBullPostLow := na(poiBullPostLow) ? poiLowSec : math.min(poiBullPostLow, poiLowSec)
+
+if not na(poiBearTermBar) and bar_index > poiBearTermBar
+    if poiCloseSec > poiOpenSec
+        poiBearBullSeq := poiBearBullSeq + 1
+    poiBearPostHigh := na(poiBearPostHigh) ? poiHighSec : math.max(poiBearPostHigh, poiHighSec)
+
+bool poiBullSmallPullback = not na(poiBullPostLow) and not na(poiBullTerminal) and
+     poiBullTerminal - poiBullPostLow > poiMinPullback
+bool poiBearSmallBounce   = not na(poiBearPostHigh) and not na(poiBearTerminal) and
+     poiBearPostHigh - poiBearTerminal > poiMinPullback
+
+var float poiCompletedLow   = na
+var float poiCompletedHigh  = na
+var int   poiCompletedDir   = 0
+var float poiCompletedRange = na
+var bool  poiCompletedNow   = false
+
+poiCompletedNow := false
+
+bool poiBullSeqFreeze = not na(poiBullBase) and not na(poiBullTerminal) and
+     poiBullTerminal > poiBullBase and
+     poiBullSmallPullback and poiBullBearSeq >= 2
+if poiBullSeqFreeze
+    poiCompletedNow   := true
+    poiCompletedLow   := poiBullBase
+    poiCompletedHigh  := poiBullTerminal
+    poiCompletedDir   := 1
+    poiCompletedRange := poiBullTerminal - poiBullBase
+
+bool poiBearSeqFreeze = not na(poiBearBase) and not na(poiBearTerminal) and
+     poiBearBase > poiBearTerminal and
+     poiBearSmallBounce and poiBearBullSeq >= 2
+if poiBearSeqFreeze
+    if not poiCompletedNow or poiBearTermBar > poiBullTermBar
+        poiCompletedNow   := true
+        poiCompletedLow   := poiBearTerminal
+        poiCompletedHigh  := poiBearBase
+        poiCompletedDir   := -1
+        poiCompletedRange := poiBearBase - poiBearTerminal
+
+if poiNewPivHigh
+    bool poiBullLowerHigh = not na(poiBullBase) and not na(poiBullTermBar) and
+         poiPivHighSec < poiBullTerminal and poiBullSmallPullback
+    if poiBullLowerHigh and poiBullTerminal > poiBullBase
+        poiCompletedNow   := true
+        poiCompletedLow   := poiBullBase
+        poiCompletedHigh  := poiBullTerminal
+        poiCompletedDir   := 1
+        poiCompletedRange := poiBullTerminal - poiBullBase
+    poiBearBase     := poiPivHighSec
+    poiBearTerminal := na
+    poiBearTermBar  := na
+    poiBearPostHigh := na
+    poiBearBullSeq  := 0
+    if not na(poiBullBase)
+        if na(poiBullTerminal) or poiPivHighSec > poiBullTerminal
+            poiBullTerminal := poiPivHighSec
+            poiBullTermBar  := bar_index
+            poiBullPostLow  := na
+            poiBullBearSeq  := 0
+
+if poiNewPivLow
+    bool poiBearHigherLow = not na(poiBearBase) and not na(poiBearTermBar) and
+         poiPivLowSec > poiBearTerminal and poiBearSmallBounce
+    if poiBearHigherLow and poiBearBase > poiBearTerminal
+        if not poiCompletedNow or poiBearTermBar > poiBullTermBar
+            poiCompletedNow   := true
+            poiCompletedLow   := poiBearTerminal
+            poiCompletedHigh  := poiBearBase
+            poiCompletedDir   := -1
+            poiCompletedRange := poiBearBase - poiBearTerminal
+    poiBullBase     := poiPivLowSec
+    poiBullTerminal := na
+    poiBullTermBar  := na
+    poiBullPostLow  := na
+    poiBullBearSeq  := 0
+    if not na(poiBearBase)
+        if na(poiBearTerminal) or poiPivLowSec < poiBearTerminal
+            poiBearTerminal := poiPivLowSec
+            poiBearTermBar  := bar_index
+            poiBearPostHigh := na
+            poiBearBullSeq  := 0
+
+var float poiPendLow   = na
+var float poiPendHigh  = na
+var int   poiPendDir   = 0
+var float poiPendRange = na
+
+if poiCompletedNow and poiCompletedRange > syminfo.mintick
+    poiPendLow   := poiCompletedLow
+    poiPendHigh  := poiCompletedHigh
+    poiPendDir   := poiCompletedDir
+    poiPendRange := poiCompletedRange
+
+var float poiRawBase     = na
+var float poiRawTerminal = na
+var int   poiRawDir      = 0
+var float poiRawRange    = na
+
+if not na(poiPendRange) and poiPendRange > 0
+    poiRawBase     := poiPendDir == 1 ? poiPendLow  : poiPendHigh
+    poiRawTerminal := poiPendDir == 1 ? poiPendHigh : poiPendLow
+    poiRawDir      := poiPendDir
+    poiRawRange    := poiPendRange
+
+var float poiRetrace = na
+if not na(poiRawRange) and poiRawRange > 0 and not na(poiRawTerminal)
+    poiRetrace := poiRawDir == -1 ?
+         (poiRawTerminal - poiCloseSec) / poiRawRange :
+         (poiCloseSec - poiRawTerminal) / poiRawRange
+
+bool poiRawConfirmed = not na(poiRetrace) and poiRetrace >= 0.5
+
+// ============================================================
+// IMPULSE LIFECYCLE ENGINE
+// ============================================================
+var string ownerState = "OWNER_NONE"
+
+var float  curImpBase      = na
+var float  curImpTerminal  = na
+var int    curImpDir       = 0
+var float  curImpRange     = na
+var bool   curImpConfirmed = false
+
+var float  prevImpBase     = na
+var float  prevImpTerminal = na
+var int    prevImpDir      = 0
+var float  prevImpRange    = na
+
+var float  pendImpBase      = na
+var float  pendImpTerminal  = na
+var int    pendImpDir       = 0
+var float  pendImpRange     = na
+var bool   pendImpConfirmed = false
+
+const float DOMINANCE_FACTOR = 0.75
+
+if primLegExists and not na(primLegTerminal) and not na(primLegRange)
+    pendImpBase      := primLegBasePrice
+    pendImpTerminal  := primLegTerminal
+    pendImpDir       := primLegDirV
+    pendImpRange     := primLegRange
+    pendImpConfirmed := primLegConfirmed
+
+bool takeoverAllowed = pendImpConfirmed and
+     not na(pendImpRange) and
+     (na(curImpRange) or pendImpRange > curImpRange * DOMINANCE_FACTOR)
+
+if takeoverAllowed
+    prevImpBase     := curImpBase
+    prevImpTerminal := curImpTerminal
+    prevImpDir      := curImpDir
+    prevImpRange    := curImpRange
+    curImpBase      := pendImpBase
+    curImpTerminal  := pendImpTerminal
+    curImpDir       := pendImpDir
+    curImpRange     := pendImpRange
+    curImpConfirmed := true
+    ownerState      := "OWNER_CURRENT"
+
+if not curImpConfirmed
+    ownerState := "OWNER_NONE"
+
+// ============================================================
+// BOUNDARY EVENT ENGINE
+// ============================================================
+string TAKE_HIGH    = "TAKE_HIGH"
+string TAKE_LOW     = "TAKE_LOW"
+string INSIDE_RANGE = "INSIDE_RANGE"
+string NO_EVENT     = "NO_EVENT"
+
+var string boundaryEvent = "NO_EVENT"
+bool prevExists = not na(prevImpBase) and not na(prevImpTerminal)
+bool curExists  = not na(curImpBase)  and not na(curImpTerminal)
+
+if prevExists and curExists
+    float prevHi = math.max(prevImpBase, prevImpTerminal)
+    float prevLo = math.min(prevImpBase, prevImpTerminal)
+    float curHi  = math.max(curImpBase,  curImpTerminal)
+    float curLo  = math.min(curImpBase,  curImpTerminal)
+    if curHi > prevHi
+        boundaryEvent := TAKE_HIGH
+    else if curLo < prevLo
+        boundaryEvent := TAKE_LOW
+    else if curHi <= prevHi and curLo >= prevLo
+        boundaryEvent := INSIDE_RANGE
+    else
+        boundaryEvent := NO_EVENT
+else
+    boundaryEvent := NO_EVENT
+
+var string structureEvent = "NONE"
+if boundaryEvent == TAKE_HIGH
+    structureEvent := curImpDir == 1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if boundaryEvent == TAKE_LOW
+    structureEvent := curImpDir == -1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if boundaryEvent == INSIDE_RANGE
+    structureEvent := "INTERNAL"
+else
+    structureEvent := "NONE"
+
+// ============================================================
+// POI CONTEXT ENGINE
+// ============================================================
+string POI_NONE     = "POI_NONE"
+string POI_ACTIVE   = "POI_ACTIVE"
+string POI_BROKEN   = "POI_BROKEN"
+string POI_STALE    = "POI_STALE"
+string POI_REPLACED = "POI_REPLACED"
+
+var string poiState = "POI_NONE"
+var float  poiBase  = na
+var float  poiTerminal = na
+var int    poiDir   = 0
+var float  poiRange = na
+var float  poiHi    = na
+var float  poiLo    = na
+var int    poiActivatedBar = na
+
+var float  poiPrevHi        = na
+var float  poiPrevLo        = na
+var string poiBoundaryEvent = "NO_EVENT"
+
+if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
+    poiPrevHi := poiHi
+    poiPrevLo := poiLo
+
+if not na(poiRawTerminal) and not na(poiRawBase)
+    float newPoiHi = math.max(poiRawBase, poiRawTerminal)
+    float newPoiLo = math.min(poiRawBase, poiRawTerminal)
+    if not na(poiPrevHi) and not na(poiPrevLo)
+        if newPoiHi > poiPrevHi
+            poiBoundaryEvent := "TAKE_HIGH"
+        else if newPoiLo < poiPrevLo
+            poiBoundaryEvent := "TAKE_LOW"
+        else
+            poiBoundaryEvent := "INSIDE_RANGE"
+    else
+        poiBoundaryEvent := "NO_EVENT"
+
+string poiStructureEvent = "NONE"
+if poiBoundaryEvent == "TAKE_HIGH"
+    poiStructureEvent := poiDir == 1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if poiBoundaryEvent == "TAKE_LOW"
+    poiStructureEvent := poiDir == -1 ? "CONTINUATION" : "STRUCTURE_BREAK"
+else if poiBoundaryEvent == "INSIDE_RANGE"
+    poiStructureEvent := "INTERNAL"
+
+if poiState == POI_NONE
+    if poiRawConfirmed
+        poiBase         := poiRawBase
+        poiTerminal     := poiRawTerminal
+        poiDir          := poiRawDir
+        poiRange        := poiRawRange
+        poiHi           := math.max(poiBase, poiTerminal)
+        poiLo           := math.min(poiBase, poiTerminal)
+        poiState        := POI_ACTIVE
+        poiActivatedBar := bar_index
+
+if poiState == POI_ACTIVE and poiStructureEvent == "STRUCTURE_BREAK"
+    if not na(poiActivatedBar) and (bar_index - poiActivatedBar) >= 5
+        poiState := POI_BROKEN
+
+if poiState == POI_ACTIVE
+    bool poiPriceAbove = poiDir == 1  and poiCloseSec > poiHi
+    bool poiPriceBelow = poiDir == -1 and poiCloseSec < poiLo
+    if poiPriceAbove or poiPriceBelow
+        poiState := POI_STALE
+
+if poiState == POI_STALE and poiRawConfirmed
+    poiBase         := poiRawBase
+    poiTerminal     := poiRawTerminal
+    poiDir          := poiRawDir
+    poiRange        := poiRawRange
+    poiHi           := math.max(poiBase, poiTerminal)
+    poiLo           := math.min(poiBase, poiTerminal)
+    poiState        := POI_ACTIVE
+    poiActivatedBar := bar_index
+
+if poiState == POI_BROKEN and poiRawConfirmed
+    poiBase     := poiRawBase
+    poiTerminal := poiRawTerminal
+    poiDir      := poiRawDir
+    poiRange    := poiRawRange
+    poiHi       := math.max(poiBase, poiTerminal)
+    poiLo       := math.min(poiBase, poiTerminal)
+    poiState    := POI_REPLACED
+
+if poiState == POI_REPLACED
+    poiState        := POI_ACTIVE
+    poiActivatedBar := bar_index
+
+// ============================================================
+// PRIMARY OWNERSHIP ENGINE
+// ============================================================
+string PRIMARY_NONE      = "PRIMARY_NONE"
+string PRIMARY_CANDIDATE = "PRIMARY_CANDIDATE"
+string PRIMARY_LOCKED    = "PRIMARY_LOCKED"
+string PRIMARY_BROKEN    = "PRIMARY_BROKEN"
+
+var string primaryState  = "PRIMARY_NONE"
+var float  primOwnerBase = na
+var float  primOwnerTerminalV = na
+var int    primOwnerDirV  = 0
+var float  primOwnerRangeV = na
+var float  primOwnerHi   = na
+var float  primOwnerLo   = na
+var int    primOwnerStartBar = na
+var int    primOwnerTermBar  = na
+
+bool poiValid = poiState == POI_ACTIVE
+bool primCandidateReady = poiValid and curImpConfirmed and
+     not na(curImpBase) and not na(curImpTerminal) and not na(curImpRange)
+
+bool primInsidePoi = false
+if primCandidateReady and not na(poiHi) and not na(poiLo)
+    float cLo = math.min(curImpBase, curImpTerminal)
+    primInsidePoi := cLo >= poiLo
+
+if primaryState == PRIMARY_NONE
+    if primCandidateReady and primInsidePoi
+        primaryState := PRIMARY_CANDIDATE
+
+if primaryState == PRIMARY_CANDIDATE
+    primaryState         := PRIMARY_LOCKED
+    primOwnerBase        := curImpBase
+    primOwnerTerminalV   := curImpTerminal
+    primOwnerDirV        := curImpDir
+    primOwnerRangeV      := curImpRange
+    primOwnerHi          := math.max(primOwnerBase, primOwnerTerminalV)
+    primOwnerLo          := math.min(primOwnerBase, primOwnerTerminalV)
+    primOwnerStartBar    := primPendStartBar
+    primOwnerTermBar     := primPendTermBar
+
+if primaryState == PRIMARY_LOCKED and structureEvent == "STRUCTURE_BREAK"
+    primaryState := PRIMARY_BROKEN
+
+if not poiValid and primaryState == PRIMARY_LOCKED
+    primaryState := PRIMARY_BROKEN
+
+if primaryState == PRIMARY_BROKEN and primCandidateReady and primInsidePoi
+    primOwnerBase        := curImpBase
+    primOwnerTerminalV   := curImpTerminal
+    primOwnerDirV        := curImpDir
+    primOwnerRangeV      := curImpRange
+    primOwnerHi          := math.max(primOwnerBase, primOwnerTerminalV)
+    primOwnerLo          := math.min(primOwnerBase, primOwnerTerminalV)
+    primaryState         := PRIMARY_LOCKED
+
+// ============================================================
+// FIB / OTE ENGINE
+// ============================================================
+var label proofLabel = na
+
+bool fibActive = primaryState == PRIMARY_LOCKED and
+     not na(primOwnerBase) and not na(primOwnerTerminalV)
+
+var float fib0   = na
+var float fib50  = na
+var float fib705 = na
+var float fib79  = na
+var float fib100 = na
+
+if fibActive
+    float base = primOwnerBase
+    float term = primOwnerTerminalV
+    float rng  = math.abs(term - base)
+    if primOwnerDirV == 1
+        fib0   := base
+        fib50  := base + rng * 0.50
+        fib705 := base + rng * (1.0 - 0.705)
+        fib79  := base + rng * (1.0 - 0.79)
+        fib100 := term
+    else
+        fib0   := base
+        fib50  := base - rng * 0.50
+        fib705 := base - rng * (1.0 - 0.705)
+        fib79  := base - rng * (1.0 - 0.79)
+        fib100 := term
+
+bool priceInOte = fibActive and not na(fib50) and not na(fib79) and
+     (primOwnerDirV == 1 ?
+         (close >= fib79 and close <= fib50) :
+         (close <= fib79 and close >= fib50))
+
+var float fibMem0   = na
+var float fibMem50  = na
+var float fibMem705 = na
+var float fibMem79  = na
+var float fibMem100 = na
+if fibActive and not na(fib0)
+    fibMem0   := fib0
+    fibMem50  := fib50
+    fibMem705 := fib705
+    fibMem79  := fib79
+    fibMem100 := fib100
+
+float drawFib0   = fibActive ? fib0   : fibMem0
+float drawFib50  = fibActive ? fib50  : fibMem50
+float drawFib705 = fibActive ? fib705 : fibMem705
+float drawFib79  = fibActive ? fib79  : fibMem79
+float drawFib100 = fibActive ? fib100 : fibMem100
+
+// ============================================================
+// VISUAL LAYER
+// ============================================================
+
+// POI TF — зелёный пунктир
+var line poiLine0    = na
+var line poiLine50   = na
+var line poiLine100  = na
+var line poiArrow    = na
+var label poiLbl0    = na
+var label poiLbl50   = na
+var label poiLbl100  = na
+
+if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
+    line.delete(poiLine0)
+    line.delete(poiLine50)
+    line.delete(poiLine100)
+    line.delete(poiArrow)
+    label.delete(poiLbl0)
+    label.delete(poiLbl50)
+    label.delete(poiLbl100)
+    float poi0   = poiDir == 1 ? poiLo  : poiHi
+    float poi100 = poiDir == 1 ? poiHi  : poiLo
+    float poi50  = (poi0 + poi100) / 2
+    poiLine0   := line.new(bar_index-1, poi0,   bar_index, poi0,   extend=extend.right, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+    poiLine50  := line.new(bar_index-1, poi50,  bar_index, poi50,  extend=extend.right, color=color.new(color.green, 50), width=1, style=line.style_dashed)
+    poiLine100 := line.new(bar_index-1, poi100, bar_index, poi100, extend=extend.right, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+    poiArrow   := line.new(bar_index-10, poi0, bar_index, poi100, color=color.new(color.green, 20), width=2, style=line.style_arrow_right)
+    poiLbl0   := label.new(bar_index, poi0,   poiLabel + " БАЗА",     style=label.style_label_left, color=color.new(color.green, 70), textcolor=color.white, size=size.tiny)
+    poiLbl50  := label.new(bar_index, poi50,  poiLabel + " 0.5",      style=label.style_label_left, color=color.new(color.green, 70), textcolor=color.white, size=size.tiny)
+    poiLbl100 := label.new(bar_index, poi100, poiLabel + " ТЕРМИНАЛ", style=label.style_label_left, color=color.new(color.green, 70), textcolor=color.white, size=size.tiny)
+
+// RAW POI — до подтверждения
+var line rawPoiLine  = na
+var label rawPoiLbl  = na
+var line rawTermLine = na
+var label rawTermLbl = na
+
+if not na(poiRawBase)
+    line.delete(rawPoiLine)
+    label.delete(rawPoiLbl)
+    rawPoiLine := line.new(bar_index-1, poiRawBase, bar_index, poiRawBase, extend=extend.right, color=color.new(color.green, 70), width=1, style=line.style_dotted)
+    rawPoiLbl  := label.new(bar_index, poiRawBase,
+         poiLabel + " RAW БАЗА (" + str.tostring(poiRawBase, "#.##") + ")",
+         style=label.style_label_left, color=color.new(color.green, 80), textcolor=color.white, size=size.tiny)
+
+if not na(poiRawTerminal)
+    line.delete(rawTermLine)
+    label.delete(rawTermLbl)
+    rawTermLine := line.new(bar_index-1, poiRawTerminal, bar_index, poiRawTerminal, extend=extend.right, color=color.new(color.green, 70), width=1, style=line.style_dotted)
+    rawTermLbl  := label.new(bar_index, poiRawTerminal,
+         poiLabel + " RAW ТЕРМ (" + str.tostring(poiRawTerminal, "#.##") + ") conf=" + str.tostring(poiRawConfirmed),
+         style=label.style_label_left, color=color.new(color.green, 80), textcolor=color.white, size=size.tiny)
+
+// PRIMARY TF — fib цвета + стрелка
+var line primLine0   = na
+var line primLine50  = na
+var line primLine705 = na
+var line primLine79  = na
+var line primLine100 = na
+var line primArrow   = na
+var label primLbl0   = na
+var label primLbl50  = na
+var label primLbl705 = na
+var label primLbl79  = na
+var label primLbl100 = na
+
+if primaryState == PRIMARY_LOCKED and not na(fib0)
+    line.delete(primLine0)
+    line.delete(primLine50)
+    line.delete(primLine705)
+    line.delete(primLine79)
+    line.delete(primLine100)
+    line.delete(primArrow)
+    label.delete(primLbl0)
+    label.delete(primLbl50)
+    label.delete(primLbl705)
+    label.delete(primLbl79)
+    label.delete(primLbl100)
+    primLine0   := line.new(bar_index-1, fib0,   bar_index, fib0,   extend=extend.right, color=color.gray,                  width=1, style=line.style_solid)
+    primLine50  := line.new(bar_index-1, fib50,  bar_index, fib50,  extend=extend.right, color=color.new(color.blue, 40),   width=1, style=line.style_dashed)
+    primLine705 := line.new(bar_index-1, fib705, bar_index, fib705, extend=extend.right, color=color.new(color.orange, 30), width=1, style=line.style_dashed)
+    primLine79  := line.new(bar_index-1, fib79,  bar_index, fib79,  extend=extend.right, color=color.new(color.red, 20),    width=1, style=line.style_dashed)
+    primLine100 := line.new(bar_index-1, fib100, bar_index, fib100, extend=extend.right, color=color.gray,                  width=1, style=line.style_solid)
+    int baseBar = na(primOwnerStartBar) ? bar_index - 50 : primOwnerStartBar
+    int termBar = na(primOwnerTermBar)  ? bar_index - 10 : primOwnerTermBar
+    primArrow   := line.new(baseBar, fib0, termBar, fib100, color=color.new(color.blue, 20), width=2, style=line.style_arrow_right)
+    primLbl0   := label.new(bar_index, fib0,   primaryLabel + " 0",        style=label.style_label_left, color=color.new(color.gray, 70),   textcolor=color.white, size=size.tiny)
+    primLbl50  := label.new(bar_index, fib50,  primaryLabel + " 0.5",      style=label.style_label_left, color=color.new(color.blue, 60),   textcolor=color.white, size=size.tiny)
+    primLbl705 := label.new(bar_index, fib705, primaryLabel + " 0.705",    style=label.style_label_left, color=color.new(color.orange, 50), textcolor=color.white, size=size.tiny)
+    primLbl79  := label.new(bar_index, fib79,  primaryLabel + " 0.79 OTE", style=label.style_label_left, color=color.new(color.red, 40),    textcolor=color.white, size=size.tiny)
+    primLbl100 := label.new(bar_index, fib100, primaryLabel + " 1",        style=label.style_label_left, color=color.new(color.gray, 70),   textcolor=color.white, size=size.tiny)
+
+// OTE зона
+bgcolor(priceInOte ? color.new(color.green, 92) : na, title="OTE зона")
+
+// СЛОМ структуры PRIMARY
+if primaryState == PRIMARY_BROKEN and primaryState[1] == PRIMARY_LOCKED
+    label.new(bar_index, high, "СЛОМ " + primaryLabel,
+         style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.small)
+
+// PROOF LABEL — русский
+label.delete(proofLabel)
+string proofText =
+     "ПРОФИЛЬ: " + selectedProfile + "\n" +
+     "POI: "     + poiLabel     + " | " + poiState     + "\n" +
+     "PRIMARY: " + primaryLabel + " | " + primaryState + "\n" +
+     "CONFIRM: " + confirmLabel + "\n" +
+     "OTE: "     + (priceInOte ? "ДА" : "НЕТ") + "\n" +
+     "ВЛАДЕЛЕЦ: " + ownerState + "\n" +
+     "rawB: "    + str.tostring(poiRawBase,     "#.##") + "\n" +
+     "rawT: "    + str.tostring(poiRawTerminal, "#.##") + "\n" +
+     "rawDir: "  + str.tostring(poiRawDir) + "\n" +
+     "rawConf: "       + str.tostring(poiRawConfirmed) + "\n" +
+     "bullSeq: "       + str.tostring(primBullBearSeq) + "\n" +
+     "bearSeq: "       + str.tostring(primBearBullSeq) + "\n" +
+     "poiBullSeq: "    + str.tostring(poiBullBearSeq) + "\n" +
+     "poiBearSeq: "    + str.tostring(poiBearBullSeq) + "\n" +
+     "primCompleted: " + str.tostring(primCompletedNow) + "\n" +
+     "poiCompleted: "  + str.tostring(poiCompletedNow)
+proofLabel := label.new(bar_index, high, proofText,
+     style=label.style_label_left, color=color.new(color.black, 70), textcolor=color.white, size=size.small)

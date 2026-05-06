@@ -1,0 +1,29 @@
+ЯЗЫК ОБЩЕНИЯ: только русский.
+
+[SMC CANON]
+primary impulse → fib / OTE → candidate in OTE → confirmations → OB → correction → IDM → trade
+no lower layer before upper proven
+code YES / chart NO = code WRONG
+
+[CRITICAL CONDITIONS]
+- один узел = одно решение
+- BEFORE архив обязателен до любого изменения кода
+- AFTER архив обязателен после изменения
+- action log обновляется после каждого этапа
+- STOP on conflict
+
+[SCOPE]
+Layer: 0 — Primary Impulse
+Node: SINGLE — POI Context Engine
+
+---
+
+CLEAN-06 — POI Context Engine
+STEP 1 — BEFORE ARCHIVE
+STEP 2 — TASK FILE
+STEP 3 — ПРОЧИТАЙ CORE
+STEP 4 — ДОБАВЬ POI CONTEXT ENGINE
+STEP 5 — AFTER ARCHIVE
+STEP 6 — ANALYSIS
+STEP 7 — ACTION LOG
+STEP 8 — ОТЧЁТ

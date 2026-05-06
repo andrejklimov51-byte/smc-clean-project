@@ -1,0 +1,316 @@
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN00_baseline_init.txt
+PRE-ANALYSIS: donor_analysis_CLEAN00.md
+OUTPUT PINE: smc_clean_l0_core.pine
+ARCHIVED PINE: smc_core_detector_L0_completion_rule_reachable_STAGE0_snapshot.pine
+POST-ANALYSIS: analysis_20250502_CLEAN00_baseline_init.md
+RESULT: Clean project initialized. Donor analyzed. Base file created. No logic yet.
+
+---
+
+TIMESTAMP: 20250502
+ЗАДАЧА: установка глобального правила архивации
+РЕЗУЛЬТАТ: правило зафиксировано, действует для всех этапов начиная с CLEAN-02
+ROLLBACK PROCEDURE: активирована
+ФОРМАТ BEFORE: [имя_файла]_BEFORE_[ЭТАП]_[ДАТА].pine
+ФОРМАТ AFTER:  [имя_файла]_AFTER_[ЭТАП]_[ДАТА].pine
+ПАПКА АРХИВОВ: D:\SMC_PROJECT_CLEAN\01_PINE\archive\
+СТОП: без BEFORE-архива код не трогать; без AFTER-архива этап не закрыт
+
+---
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN02_raw_mtf_source.txt
+PRE-ANALYSIS: donor_analysis_CLEAN00.md
+BEFORE ARCHIVE: smc_clean_l0_core_BEFORE_CLEAN02_20250502.pine
+OUTPUT PINE: smc_clean_l0_core.pine
+AFTER ARCHIVE: smc_clean_l0_core_AFTER_CLEAN02_20250502.pine
+POST-ANALYSIS: analysis_20250502_CLEAN02_raw_mtf_source.md
+RESULT: Raw MTF Source Engine добавлен. Три TF подключены. Owner не назначен. Gate пройден.
+
+---
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN03_impulse_object_engine.txt
+BEFORE ARCHIVE: smc_clean_l0_core_BEFORE_CLEAN03_20250502.pine
+OUTPUT PINE: smc_clean_l0_core.pine
+AFTER ARCHIVE: smc_clean_l0_core_AFTER_CLEAN03_20250502.pine
+POST-ANALYSIS: analysis_20250502_CLEAN03_impulse_object_engine.md
+RESULT: Impulse Object Engine добавлен. Pivot detection + ATR gate + retrace 0.5. Owner не назначен.
+
+---
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN04_impulse_lifecycle_engine.txt
+BEFORE ARCHIVE: smc_clean_l0_core_BEFORE_CLEAN04_20250502.pine
+OUTPUT PINE: smc_clean_l0_core.pine
+AFTER ARCHIVE: smc_clean_l0_core_AFTER_CLEAN04_20250502.pine
+POST-ANALYSIS: analysis_20250502_CLEAN04_impulse_lifecycle_engine.md
+RESULT: Lifecycle Engine добавлен. Takeover contract с dominance. const int исправлен. Owner state назначается.
+
+---
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN05_boundary_event_engine.txt
+BEFORE ARCHIVE: smc_clean_l0_core_BEFORE_CLEAN05_20250502.pine
+OUTPUT PINE: smc_clean_l0_core.pine
+AFTER ARCHIVE: smc_clean_l0_core_AFTER_CLEAN05_20250502.pine
+POST-ANALYSIS: analysis_20250502_CLEAN05_boundary_event_engine.md
+RESULT: Boundary Event Engine добавлен. Устаревшие блоки удалены. Слом через high/low импульсов. 0.79 не участвует.
+
+---
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN06_poi_context_engine.txt
+BEFORE ARCHIVE: smc_clean_l0_core_BEFORE_CLEAN06_20250502.pine
+OUTPUT PINE: smc_clean_l0_core.pine
+AFTER ARCHIVE: smc_clean_l0_core_AFTER_CLEAN06_20250502.pine
+POST-ANALYSIS: analysis_20250502_CLEAN06_poi_context_engine.md
+RESULT: POI Context Engine добавлен. POI states. Broken POI заменяется. POI != raw latest.
+
+---
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN07_primary_ownership_engine.txt
+BEFORE ARCHIVE: smc_clean_l0_core_BEFORE_CLEAN07_20250502.pine
+OUTPUT PINE: smc_clean_l0_core.pine
+AFTER ARCHIVE: smc_clean_l0_core_AFTER_CLEAN07_20250502.pine
+POST-ANALYSIS: analysis_20250502_CLEAN07_primary_ownership_engine.md
+RESULT: Исправлены замечания CLEAN-06. POI_STALE добавлен. Primary Ownership Engine добавлен. Primary только внутри valid POI.
+
+---
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN08_fib_ote_engine.txt
+BEFORE ARCHIVE: smc_clean_l0_core_BEFORE_CLEAN08_20250502.pine
+OUTPUT PINE: smc_clean_l0_core.pine
+AFTER ARCHIVE: smc_clean_l0_core_AFTER_CLEAN08_20250502.pine
+POST-ANALYSIS: analysis_20250502_CLEAN08_fib_ote_engine.md
+RESULT: Fib / OTE Engine добавлен. Proof label добавлен. primInsidePoi исправлен. Готов к загрузке в TradingView.
+
+---
+
+TIMESTAMP: 20250502
+TASK: task_20250502_CLEAN09_chart_proof_prep.txt
+BEFORE ARCHIVE: smc_clean_l0_core_BEFORE_CLEAN09_20250502.pine
+OUTPUT PINE: smc_clean_l0_core.pine
+AFTER ARCHIVE: smc_clean_l0_core_AFTER_CLEAN09_20250502.pine
+TV READY FILE: smc_clean_l0_core_READY_FOR_TV_20250502.pine
+POST-ANALYSIS: analysis_20250502_CLEAN09_chart_proof_prep.md
+RESULT: Chart proof маркеры добавлены. Файл READY_FOR_TV создан. Готов к загрузке в TradingView.
+
+---
+[CLEAN-10] 2026-05-04
+ACTION: POI_BROKEN guard � ������� 5 ����� � ������� ���������
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN10_20260504.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN10_20260504.pine
+CHANGES:
+  + var int poiActivatedBar = na
+  + poiActivatedBar := bar_index ��� ������ �������� � POI_ACTIVE (3 �����)
+  + BROKEN condition: guard (bar_index - poiActivatedBar) >= 5
+  + proofLabel: ������ "POI �����: N"
+STATUS: OK
+
+---
+[CLEAN-11] 2026-05-04
+ACTION: Расширение proof label + cooldown для TAKE маркера
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN11_2026-05-04.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN11_2026-05-04.pine
+CHANGES:
+  ПРАВКА 1 — proofText: добавлены поля impDir, boundary, struct; порядок полей изменён (POI баров — последнее)
+  ПРАВКА 2 — TAKE маркер: добавлен cooldown var int lastTakeBar, условие (bar_index - lastTakeBar) >= 10
+STATUS: OK
+
+---
+[CLEAN-12] 2026-05-04
+ACTION: Диагностика primInsidePoi — добавлены поля в proof label
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN12_2026-05-04.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN12_2026-05-04.pine
+CHANGES:
+  + proofText: poiHi, poiLo, curHi, curLo, inPOI (без изменения логики)
+STATUS: OK
+
+---
+[CLEAN-13] 2026-05-04
+ACTION: POI_STALE порог — убран 1.02 множитель, строгая граница high/low
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN13_2026-05-04.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN13_2026-05-04.pine
+CHANGES:
+  poiPriceAbove: close > poiHi * 1.02 → close > poiHi
+  poiPriceBelow: close < poiLo * 0.98 → close < poiLo
+REASON: curHi=91637 > poiHi=80578 — POI был stale 520 баров, порог 1.02 не срабатывал
+STATUS: OK
+
+---
+[CLEAN-14] 2026-05-04
+ACTION: Диагностика PRIMARY recovery — добавлены поля в proof label (без изменения логики)
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN14_2026-05-04.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN14_2026-05-04.pine
+NOTE: core файл был случайно перезаписан baseline CLEAN-00 — восстановлен из AFTER_CLEAN13
+CHANGES:
+  + proofText: poiActivated, curBase, curTerm, primInPOI, primReady
+STATUS: OK
+
+---
+[CLEAN-15] 2026-05-04
+ACTION: primInsidePoi — убрана проверка candHi <= poiHi
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN15_2026-05-04.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN15_2026-05-04.pine
+CHANGES:
+  primInsidePoi: candHi <= poiHi and candLo >= poiLo → candLo >= poiLo
+REASON: терминал impulse может выйти за poiHi — это рабочее движение.
+        Условие candHi<=poiHi блокировало PRIMARY recovery для любого
+        impulse с терминалом выше POI верхней границы.
+STATUS: OK
+
+---
+[CLEAN-16] 2026-05-05
+ACTION: Candidate Engine Layer 2 — sweep candle внутри OTE
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN16_2026-05-05.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN16_2026-05-05.pine
+CHANGES:
+  + CANDIDATE ENGINE блок (50 строк): candBar, candHiC, candLoC, candDir, candExists, candStatus
+  + candSearchAllowed: PRIMARY_LOCKED and priceInOte
+  + bullSweep/bearSweep: sweep candle через fib79 с rejection
+  + Lock немедленно при первом sweep
+  + Reset при PRIMARY_BROKEN
+  + Визуал: CAND▲/CAND▼ маркер на баре
+  + proofText: + "CAND: " + candStatus
+STATUS: OK
+
+---
+[CLEAN-17] 2026-05-05
+ACTION: Диагностика poiRawConfirmed — добавлены rawBase/rawTerm/rawRange/rawRetrace/rawAtr/rawConf в proofText
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN17_2026-05-05.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN17_2026-05-05.pine
+CHANGES:
+  + proofText: rawBase, rawTerm, rawRange, rawRetrace, rawAtr, rawConf
+REASON: диагностика почему poiRawConfirmed не становится true на ZECUSDT.P 1H
+STATUS: OK (AFTER архив перезаписан финальной правкой)
+
+[CLEAN-17 FIX] Race condition исправлен:
+  БЫЛО: poiNewPivLow и poiNewPivHigh могли сработать одновременно → поиRawBase
+        перезаписывалась, но poiRawTerminal/Range вычислялись от старых значений
+  СТАЛО: if poiNewPivLow and not poiNewPivHigh → база + сброс terminal/range
+         if poiNewPivHigh and not poiNewPivLow → база + сброс terminal/range
+         Терминал обновляется только если direction совпадает и нет конфликта
+
+---
+[CLEAN-19] 2026-05-05
+ACTION: Visual Layer — auto profile + новый visual слой + удалён CANDIDATE ENGINE
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN19_2026-05-05.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN19_2026-05-05.pine
+CHANGES:
+  ЧАСТЬ 1: selectedProfile → auto по timeframe.period (15/60=A, иное=B)
+  ЧАСТЬ 2: удалены lineFib0-100, POI▲/✗ PRI▲/✗ TAKE CAND маркеры, старый bgcolor
+  ЧАСТЬ 3: новый VISUAL LAYER — POI зелёный (0/0.5/1 + стрелка)
+            PRIMARY fib стандартные цвета (0/0.5/0.705/0.79/1 + стрелка)
+            CONFIRM жёлтый (0/0.5/1 + стрелка)
+            OTE bgcolor зелёный 92%
+            СЛОМ PRIMARY метка
+            proofText на русском (ПРОФИЛЬ/POI/PRIMARY/CONFIRM/OTE/ВЛАДЕЛЕЦ)
+  УДАЛЕНО: весь CANDIDATE ENGINE (logic + visual)
+STATUS: OK
+
+---
+[CLEAN-20 RAW VISUAL + BUGFIXES] 2026-05-05
+ACTION: RAW POI visual + исправление 4 багов + CLAUDE.md правило источника данных
+  + rawPoiLine/rawPoiLbl: dotted green на poiRawBase
+  + rawTermLine/rawTermLbl: dotted green на poiRawTerminal с conf= статусом
+  + proofText: rawB, rawT, rawDir, rawConf
+  БАГ 1: poiRetrace → poiClose вместо close
+  БАГ 2: primRetrace → primClose вместо close
+  БАГ 3: max_labels/lines_count=500
+  БАГ 4: CONFIRM TF visual блок удалён (дублировал PRIMARY)
+  CLAUDE.md: добавлен раздел ПРАВИЛО ПРОВЕРКИ ИСТОЧНИКА ДАННЫХ
+STATUS: OK
+
+---
+[CLEAN-21] 2026-05-05
+ACTION: Полная замена impulse detection на донорский completion rule
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN21_2026-05-05.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN21_2026-05-05.pine
+CHANGES:
+  УДАЛЁН: старый IMPULSE OBJECT ENGINE (zigzag/race-condition блоки)
+  УДАЛЁН: старый poiRaw блок (CLEAN-17)
+  ДОБАВЛЕН: донорский completion rule inline через request.security
+    - PRIMARY TF: primBull/BearBase/Terminal/PostLow/PostHigh + seqFreeze + structFreeze + retrace confirm
+    - POI TF: та же логика, другой TF
+    - Экспорт: primLegBasePrice/Terminal/Dir/Range/Confirmed/Exists → lifecycle engine
+    - Экспорт: poiRawBase/Terminal/Dir/Range/Confirmed → POI context engine
+    - POI STALE через poiCloseSec (не close)
+STATUS: OK — TradingView недоступен при записи, применить при следующем подключении
+
+---
+[CLEAN-22] 2026-05-06
+ACTION: Два исправления sequence freeze + ATR фильтр
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN22_2026-05-06.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN22_2026-05-06.pine
+CHANGES:
+  ИСПРАВЛЕНИЕ 1: sequence freeze — убран else-сброс счётчиков
+    primBullBearSeq / primBearBullSeq не сбрасываются в 0 между барами
+    poiBullBearSeq / poiBearBullSeq аналогично
+    Причина: на display TF данные primCloseSec не меняются каждый бар,
+    поэтому условие else сбрасывало счётчик раньше времени
+  ИСПРАВЛЕНИЕ 2: ATR фильтр completed leg → syminfo.mintick
+    primCompletedRange > primAtrSec → > syminfo.mintick
+    poiCompletedRange > poiAtrSec → > syminfo.mintick
+    Причина: ATR уже применён в SmallPullback, двойной фильтр блокировал реальные ноги
+  ДИАГНОСТИКА: добавлены bullSeq/bearSeq/poiBullSeq/poiBearSeq/primCompleted/poiCompleted в proofText
+STATUS: OK
+
+---
+[CLEAN-23] 2026-05-06
+ACTION: Исправление круговой блокировки terminal bar — убрана проверка not na(termBar) из условия входа
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN23_2026-05-06.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN23_2026-05-06.pine
+CHANGES:
+  primNewPivHigh: not na(primBullBase) and not na(primBullTermBar) → not na(primBullBase)
+  primNewPivLow:  not na(primBearBase) and not na(primBearTermBar) → not na(primBearBase)
+  poiNewPivHigh:  not na(poiBullBase) and not na(poiBullTermBar)   → not na(poiBullBase)
+  poiNewPivLow:   not na(poiBearBase) and not na(poiBearTermBar)   → not na(poiBearBase)
+REASON: primBullTermBar инициализируется na, а устанавливается только внутри блока
+        с условием not na(primBullTermBar) — круговая блокировка. Первый пивот-хай
+        после пивот-лоу никогда не входил в блок → terminal/termBar оставались na
+        → счётчики не инкрементировались → ни одна нога не завершалась → rawB: NaN
+STATUS: OK
+
+---
+[CLEAN-24] 2026-05-06
+ACTION: startBar/termBar pipeline — detection → ownership → visual arrow
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN24_2026-05-06.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN24_2026-05-06.pine
+CHANGES:
+  + var int primPendStartBar / primPendTermBar — передача баров из detection
+  + primBullSeqFreeze / primBullLowerHigh: primPendStartBar := primBullTermBar-1, primPendTermBar := primBullTermBar
+  + primBearSeqFreeze / primBearHigherLow: primPendStartBar := primBearTermBar-1, primPendTermBar := primBearTermBar
+  + var int primOwnerStartBar / primOwnerTermBar в PRIMARY OWNERSHIP ENGINE
+  + if primaryState == PRIMARY_CANDIDATE: primOwnerStartBar := primPendStartBar, primOwnerTermBar := primPendTermBar
+  + VISUAL: primArrow.new(baseBar, fib0, termBar, fib100) — реальные бары вместо bar_index-10/0
+NOTE: startBar — приближение (termBar-1). Точный baseBar требует отдельной переменной.
+STATUS: OK
+
+---
+[CLEAN-20] 2026-05-05
+ACTION: RAW POI visual + rawB/rawT/rawConf в proofText
+FILES:
+  BEFORE: archive\smc_clean_l0_core_BEFORE_CLEAN20_2026-05-05.pine
+  AFTER:  archive\smc_clean_l0_core_AFTER_CLEAN20_2026-05-05.pine
+CHANGES:
+  + rawPoiLine / rawPoiLbl: dotted green линия на poiRawBase (виден до подтверждения POI)
+  + rawTermLine / rawTermLbl: dotted green линия на poiRawTerminal + conf= статус
+  + proofText: rawB, rawT, rawConf
+STATUS: OK
