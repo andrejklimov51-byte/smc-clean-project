@@ -512,10 +512,14 @@ if poiState == POI_NONE
         poiActivatedBar := bar_index
 
         // Рисуем POI линии ОДИН РАЗ при активации
-        if not na(poiLine0)   line.delete(poiLine0)
-        if not na(poiLine50)  line.delete(poiLine50)
-        if not na(poiLine100) line.delete(poiLine100)
-        if not na(poiArrow)   line.delete(poiArrow)
+        if not na(poiLine0)
+            line.delete(poiLine0)
+        if not na(poiLine50)
+            line.delete(poiLine50)
+        if not na(poiLine100)
+            line.delete(poiLine100)
+        if not na(poiArrow)
+            line.delete(poiArrow)
 
         float pp0   = poiDir == 1 ? poiLo  : poiHi
         float pp100 = poiDir == 1 ? poiHi  : poiLo
@@ -622,15 +626,24 @@ if primaryState == PRIMARY_CANDIDATE
     float f705 = f0 + (primOwnerDirV == 1 ? rng*0.295 : -rng*0.295)
     float f79  = f0 + (primOwnerDirV == 1 ? rng*0.21  : -rng*0.21)
 
-    if not na(primLine0)   line.delete(primLine0)
-    if not na(primLine50)  line.delete(primLine50)
-    if not na(primLine705) line.delete(primLine705)
-    if not na(primLine79)  line.delete(primLine79)
-    if not na(primLine100) line.delete(primLine100)
-    if not na(primArrow)   line.delete(primArrow)
-    if not na(primOteBox)  box.delete(primOteBox)
-    if not na(primLblBase) label.delete(primLblBase)
-    if not na(primLblTerm) label.delete(primLblTerm)
+    if not na(primLine0)
+        line.delete(primLine0)
+    if not na(primLine50)
+        line.delete(primLine50)
+    if not na(primLine705)
+        line.delete(primLine705)
+    if not na(primLine79)
+        line.delete(primLine79)
+    if not na(primLine100)
+        line.delete(primLine100)
+    if not na(primArrow)
+        line.delete(primArrow)
+    if not na(primOteBox)
+        box.delete(primOteBox)
+    if not na(primLblBase)
+        label.delete(primLblBase)
+    if not na(primLblTerm)
+        label.delete(primLblTerm)
 
     if not na(sBar) and not na(tBar)
         primLine0   := line.new(sBar, f0,   tBar, f0,   extend=extend.right, color=color.gray,                 width=2, style=line.style_solid)
