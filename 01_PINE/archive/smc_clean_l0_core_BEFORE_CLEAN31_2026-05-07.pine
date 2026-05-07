@@ -648,16 +648,17 @@ float drawFib79  = fibActive ? fib79  : fibMem79
 float drawFib100 = fibActive ? fib100 : fibMem100
 
 // ============================================================
-// VISUAL LAYER — только последний сценарий
+// VISUAL LAYER
 // ============================================================
 
-// POI — зелёный пунктир 0/0.5/1 + стрелка (только при POI_ACTIVE)
-var line poiLine0   = na
-var line poiLine50  = na
-var line poiLine100 = na
-var line poiArrow   = na
-var label poiLbl0   = na
-var label poiLbl100 = na
+// POI TF — зелёный пунктир
+var line poiLine0    = na
+var line poiLine50   = na
+var line poiLine100  = na
+var line poiArrow    = na
+var label poiLbl0    = na
+var label poiLbl50   = na
+var label poiLbl100  = na
 
 if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
     line.delete(poiLine0)
@@ -665,80 +666,115 @@ if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
     line.delete(poiLine100)
     line.delete(poiArrow)
     label.delete(poiLbl0)
+    label.delete(poiLbl50)
     label.delete(poiLbl100)
-    float p0   = poiDir == 1 ? poiLo  : poiHi
-    float p100 = poiDir == 1 ? poiHi  : poiLo
-    float p50  = (p0 + p100) / 2
-    poiLine0   := line.new(bar_index, p0,   bar_index, p0,   extend=extend.both, color=color.new(color.green,30), width=1, style=line.style_dashed)
-    poiLine50  := line.new(bar_index, p50,  bar_index, p50,  extend=extend.both, color=color.new(color.green,50), width=1, style=line.style_dashed)
-    poiLine100 := line.new(bar_index, p100, bar_index, p100, extend=extend.both, color=color.new(color.green,30), width=1, style=line.style_dashed)
-    int poiFrom = na(poiActivatedBar) ? bar_index - 200 : math.max(poiActivatedBar, bar_index - 500)
-    poiArrow   := line.new(poiFrom, p0, poiFrom + 5, p100,
-         color=color.new(color.green,20), width=3,
-         style=line.style_arrow_right)
-    poiLbl0    := label.new(bar_index, p0,   poiLabel + " 0",        style=label.style_label_left, color=color.new(color.green,60), textcolor=color.white, size=size.tiny)
-    poiLbl100  := label.new(bar_index, p100, poiLabel + " 1",        style=label.style_label_left, color=color.new(color.green,60), textcolor=color.white, size=size.tiny)
+    float poi0   = poiDir == 1 ? poiLo  : poiHi
+    float poi100 = poiDir == 1 ? poiHi  : poiLo
+    float poi50  = (poi0 + poi100) / 2
+    int poiFromBar = na(poiActivatedBar) ? bar_index - 100 : poiActivatedBar
+    poiLine0   := line.new(poiFromBar, poi0,   bar_index, poi0,   extend=extend.right, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+    poiLine50  := line.new(poiFromBar, poi50,  bar_index, poi50,  extend=extend.right, color=color.new(color.green, 50), width=1, style=line.style_dashed)
+    poiLine100 := line.new(poiFromBar, poi100, bar_index, poi100, extend=extend.right, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+    poiArrow   := line.new(poiFromBar, poi0, bar_index, poi100, color=color.new(color.green, 20), width=2, style=line.style_arrow_right)
+    poiLbl0   := label.new(bar_index, poi0,   poiLabel + " БАЗА",     style=label.style_label_left, color=color.new(color.green, 70), textcolor=color.white, size=size.tiny)
+    poiLbl50  := label.new(bar_index, poi50,  poiLabel + " 0.5",      style=label.style_label_left, color=color.new(color.green, 70), textcolor=color.white, size=size.tiny)
+    poiLbl100 := label.new(bar_index, poi100, poiLabel + " ТЕРМИНАЛ", style=label.style_label_left, color=color.new(color.green, 70), textcolor=color.white, size=size.tiny)
 
-// PRIMARY — fib линии + стрелка + OTE box (при LOCKED или BROKEN)
+// RAW POI — до подтверждения
+var line rawPoiLine  = na
+var label rawPoiLbl  = na
+var line rawTermLine = na
+var label rawTermLbl = na
+
+if not na(poiRawBase)
+    line.delete(rawPoiLine)
+    label.delete(rawPoiLbl)
+    rawPoiLine := line.new(bar_index-1, poiRawBase, bar_index, poiRawBase, extend=extend.right, color=color.new(color.green, 70), width=1, style=line.style_dotted)
+    rawPoiLbl  := label.new(bar_index, poiRawBase,
+         poiLabel + " RAW БАЗА (" + str.tostring(poiRawBase, "#.##") + ")",
+         style=label.style_label_left, color=color.new(color.green, 80), textcolor=color.white, size=size.tiny)
+
+if not na(poiRawTerminal)
+    line.delete(rawTermLine)
+    label.delete(rawTermLbl)
+    rawTermLine := line.new(bar_index-1, poiRawTerminal, bar_index, poiRawTerminal, extend=extend.right, color=color.new(color.green, 70), width=1, style=line.style_dotted)
+    rawTermLbl  := label.new(bar_index, poiRawTerminal,
+         poiLabel + " RAW ТЕРМ (" + str.tostring(poiRawTerminal, "#.##") + ") conf=" + str.tostring(poiRawConfirmed),
+         style=label.style_label_left, color=color.new(color.green, 80), textcolor=color.white, size=size.tiny)
+
+// PRIMARY TF — fib цвета + стрелка
 var line primLine0   = na
 var line primLine50  = na
 var line primLine705 = na
 var line primLine79  = na
 var line primLine100 = na
 var line primArrow   = na
-var box  primOteBox  = na
+var label primLbl0   = na
 var label primLbl50  = na
 var label primLbl705 = na
 var label primLbl79  = na
+var label primLbl100 = na
 
-bool primVis = (primaryState == PRIMARY_LOCKED or primaryState == PRIMARY_BROKEN) and not na(drawFib0)
+bool primVisActive = (primaryState == PRIMARY_LOCKED or primaryState == PRIMARY_BROKEN) and not na(drawFib0)
 
-if primVis
+if primVisActive
     line.delete(primLine0)
     line.delete(primLine50)
     line.delete(primLine705)
     line.delete(primLine79)
     line.delete(primLine100)
     line.delete(primArrow)
-    box.delete(primOteBox)
+    label.delete(primLbl0)
     label.delete(primLbl50)
     label.delete(primLbl705)
     label.delete(primLbl79)
-    primLine0   := line.new(bar_index, drawFib0,   bar_index, drawFib0,   extend=extend.both, color=color.gray,                    width=2, style=line.style_solid)
-    primLine50  := line.new(bar_index, drawFib50,  bar_index, drawFib50,  extend=extend.both, color=color.new(color.blue,40),       width=1, style=line.style_dashed)
-    primLine705 := line.new(bar_index, drawFib705, bar_index, drawFib705, extend=extend.both, color=color.new(color.orange,30),     width=1, style=line.style_dashed)
-    primLine79  := line.new(bar_index, drawFib79,  bar_index, drawFib79,  extend=extend.both, color=color.new(color.red,20),        width=1, style=line.style_dashed)
-    primLine100 := line.new(bar_index, drawFib100, bar_index, drawFib100, extend=extend.both, color=color.gray,                    width=2, style=line.style_solid)
-    int primFrom = na(primOwnerStartBar) ? bar_index - 100 : primOwnerStartBar
-    int primTo   = na(primOwnerTermBar)  ? bar_index - 20  : primOwnerTermBar
-    if primFrom < bar_index - 499
-        primFrom := bar_index - 499
-    if primTo < bar_index - 498
-        primTo := bar_index - 498
-    primArrow   := line.new(primFrom, drawFib0, primTo, drawFib100,
-         color=color.new(color.blue,20), width=2,
-         style=line.style_arrow_right)
-    primOteBox  := box.new(primTo, drawFib79, bar_index + 20, drawFib50, border_color=color.new(color.green,50), border_width=1, bgcolor=color.new(color.green,85))
-    primLbl50   := label.new(bar_index, drawFib50,  primaryLabel + " 0.5",     style=label.style_label_left, color=color.new(color.blue,60),   textcolor=color.white, size=size.tiny)
-    primLbl705  := label.new(bar_index, drawFib705, primaryLabel + " 0.705",   style=label.style_label_left, color=color.new(color.orange,50), textcolor=color.white, size=size.tiny)
-    primLbl79   := label.new(bar_index, drawFib79,  primaryLabel + " 0.79 OTE",style=label.style_label_left, color=color.new(color.red,40),    textcolor=color.white, size=size.tiny)
+    label.delete(primLbl100)
+    primLine0   := line.new(bar_index-1, drawFib0,   bar_index, drawFib0,   extend=extend.right, color=color.gray,                  width=1, style=line.style_solid)
+    primLine50  := line.new(bar_index-1, drawFib50,  bar_index, drawFib50,  extend=extend.right, color=color.new(color.blue, 40),   width=1, style=line.style_dashed)
+    primLine705 := line.new(bar_index-1, drawFib705, bar_index, drawFib705, extend=extend.right, color=color.new(color.orange, 30), width=1, style=line.style_dashed)
+    primLine79  := line.new(bar_index-1, drawFib79,  bar_index, drawFib79,  extend=extend.right, color=color.new(color.red, 20),    width=1, style=line.style_dashed)
+    primLine100 := line.new(bar_index-1, drawFib100, bar_index, drawFib100, extend=extend.right, color=color.gray,                  width=1, style=line.style_solid)
+    int baseBar = na(primOwnerStartBar) ? bar_index - 50 : primOwnerStartBar
+    int termBar = na(primOwnerTermBar)  ? bar_index - 10 : primOwnerTermBar
+    primArrow   := line.new(baseBar, drawFib0, termBar, drawFib100, color=color.new(color.blue, 20), width=2, style=line.style_arrow_right)
+    primLbl0   := label.new(bar_index, drawFib0,   primaryLabel + " 0",        style=label.style_label_left, color=color.new(color.gray, 70),   textcolor=color.white, size=size.tiny)
+    primLbl50  := label.new(bar_index, drawFib50,  primaryLabel + " 0.5",      style=label.style_label_left, color=color.new(color.blue, 60),   textcolor=color.white, size=size.tiny)
+    primLbl705 := label.new(bar_index, drawFib705, primaryLabel + " 0.705",    style=label.style_label_left, color=color.new(color.orange, 50), textcolor=color.white, size=size.tiny)
+    primLbl79  := label.new(bar_index, drawFib79,  primaryLabel + " 0.79 OTE", style=label.style_label_left, color=color.new(color.red, 40),    textcolor=color.white, size=size.tiny)
+    primLbl100 := label.new(bar_index, drawFib100, primaryLabel + " 1",        style=label.style_label_left, color=color.new(color.gray, 70),   textcolor=color.white, size=size.tiny)
 
-// OTE bgcolor
-bgcolor(priceInOte ? color.new(color.green, 92) : na, title="OTE")
+// OTE зона
+bgcolor(priceInOte ? color.new(color.green, 92) : na, title="OTE зона")
 
-// СЛОМ
+// СЛОМ структуры PRIMARY
 if primaryState == PRIMARY_BROKEN and primaryState[1] == PRIMARY_LOCKED
-    label.new(bar_index, high, "СЛОМ " + primaryLabel, style=label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
+    label.new(bar_index, high, "СЛОМ " + primaryLabel,
+         style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.small)
 
-// PROOF LABEL — только необходимое
+// PROOF LABEL — русский
 label.delete(proofLabel)
-proofLabel := label.new(bar_index, high,
+string proofText =
      "ПРОФИЛЬ: " + selectedProfile + "\n" +
      "POI: "     + poiLabel     + " | " + poiState     + "\n" +
+     "poiHi: " + str.tostring(poiHi, "#.##") + "\n" +
+     "poiLo: " + str.tostring(poiLo, "#.##") + "\n" +
+     "poiBase: " + str.tostring(poiBase, "#.##") + "\n" +
+     "poiTerm: " + str.tostring(poiTerminal, "#.##") + "\n" +
      "PRIMARY: " + primaryLabel + " | " + primaryState + "\n" +
-     "OTE: "     + (priceInOte ? "ДА" : "НЕТ")         + "\n" +
-     "ВЛАДЕЛЕЦ: " + ownerState,
-     style=label.style_label_left,
-     color=color.new(color.black,70),
-     textcolor=color.white,
-     size=size.small)
+     "CONFIRM: " + confirmLabel + "\n" +
+     "OTE: "     + (priceInOte ? "ДА" : "НЕТ") + "\n" +
+     "ВЛАДЕЛЕЦ: " + ownerState + "\n" +
+     "startBar: " + str.tostring(primOwnerStartBar) + "\n" +
+     "termBar: "  + str.tostring(primOwnerTermBar)  + "\n" +
+     "rawB: "    + str.tostring(poiRawBase,     "#.##") + "\n" +
+     "rawT: "    + str.tostring(poiRawTerminal, "#.##") + "\n" +
+     "rawDir: "  + str.tostring(poiRawDir) + "\n" +
+     "rawConf: "       + str.tostring(poiRawConfirmed) + "\n" +
+     "bullSeq: "       + str.tostring(primBullBearSeq) + "\n" +
+     "bearSeq: "       + str.tostring(primBearBullSeq) + "\n" +
+     "poiBullSeq: "    + str.tostring(poiBullBearSeq) + "\n" +
+     "poiBearSeq: "    + str.tostring(poiBearBullSeq) + "\n" +
+     "primCompleted: " + str.tostring(primCompletedNow) + "\n" +
+     "poiCompleted: "  + str.tostring(poiCompletedNow)
+proofLabel := label.new(bar_index, high, proofText,
+     style=label.style_label_left, color=color.new(color.black, 70), textcolor=color.white, size=size.small)

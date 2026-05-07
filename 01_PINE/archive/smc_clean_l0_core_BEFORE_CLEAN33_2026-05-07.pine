@@ -673,9 +673,7 @@ if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
     poiLine50  := line.new(bar_index, p50,  bar_index, p50,  extend=extend.both, color=color.new(color.green,50), width=1, style=line.style_dashed)
     poiLine100 := line.new(bar_index, p100, bar_index, p100, extend=extend.both, color=color.new(color.green,30), width=1, style=line.style_dashed)
     int poiFrom = na(poiActivatedBar) ? bar_index - 200 : math.max(poiActivatedBar, bar_index - 500)
-    poiArrow   := line.new(poiFrom, p0, poiFrom + 5, p100,
-         color=color.new(color.green,20), width=3,
-         style=line.style_arrow_right)
+    poiArrow   := line.new(poiFrom, p0, poiFrom + 10, p100, color=color.new(color.green,20), width=3, style=line.style_arrow_right)
     poiLbl0    := label.new(bar_index, p0,   poiLabel + " 0",        style=label.style_label_left, color=color.new(color.green,60), textcolor=color.white, size=size.tiny)
     poiLbl100  := label.new(bar_index, p100, poiLabel + " 1",        style=label.style_label_left, color=color.new(color.green,60), textcolor=color.white, size=size.tiny)
 
@@ -709,15 +707,9 @@ if primVis
     primLine705 := line.new(bar_index, drawFib705, bar_index, drawFib705, extend=extend.both, color=color.new(color.orange,30),     width=1, style=line.style_dashed)
     primLine79  := line.new(bar_index, drawFib79,  bar_index, drawFib79,  extend=extend.both, color=color.new(color.red,20),        width=1, style=line.style_dashed)
     primLine100 := line.new(bar_index, drawFib100, bar_index, drawFib100, extend=extend.both, color=color.gray,                    width=2, style=line.style_solid)
-    int primFrom = na(primOwnerStartBar) ? bar_index - 100 : primOwnerStartBar
-    int primTo   = na(primOwnerTermBar)  ? bar_index - 20  : primOwnerTermBar
-    if primFrom < bar_index - 499
-        primFrom := bar_index - 499
-    if primTo < bar_index - 498
-        primTo := bar_index - 498
-    primArrow   := line.new(primFrom, drawFib0, primTo, drawFib100,
-         color=color.new(color.blue,20), width=2,
-         style=line.style_arrow_right)
+    int primFrom = na(primOwnerStartBar) ? bar_index - 100 : math.max(primOwnerStartBar, bar_index - 500)
+    int primTo   = na(primOwnerTermBar)  ? bar_index - 20  : math.max(primOwnerTermBar,  bar_index - 490)
+    primArrow   := line.new(primFrom, drawFib0, primTo, drawFib100, color=color.new(color.blue,20), width=2, style=line.style_arrow_right)
     primOteBox  := box.new(primTo, drawFib79, bar_index + 20, drawFib50, border_color=color.new(color.green,50), border_width=1, bgcolor=color.new(color.green,85))
     primLbl50   := label.new(bar_index, drawFib50,  primaryLabel + " 0.5",     style=label.style_label_left, color=color.new(color.blue,60),   textcolor=color.white, size=size.tiny)
     primLbl705  := label.new(bar_index, drawFib705, primaryLabel + " 0.705",   style=label.style_label_left, color=color.new(color.orange,50), textcolor=color.white, size=size.tiny)
