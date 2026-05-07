@@ -1,4 +1,4 @@
-# CLAUDE.md — SMC PROJECT RULES v2
+# CLAUDE.md — SMC PROJECT RULES
 
 ## ЯЗЫК
 Все ответы только на русском. Код и пути — английский.
@@ -9,69 +9,41 @@
 - Все файлы только в D:\SMC_PROJECT_CLEAN\
 - Без BEFORE архива — код не трогать
 - code YES / chart NO = code WRONG
-- Перед каждым заданием читать SESSION_STATE.md
 
 ## КАНОН
-primary impulse → OTE → candidate (sweep candle) → OB → IDM → trade
-candidate = sweep candle, lock immediately, no replacement
+primary impulse → OTE → candidate → OB → IDM → trade
+candidate = sweep candle, lock immediately
 no lower layer before upper proven
 
 ## АВТОНОМНЫЙ ЦИКЛ (обязателен после каждого CLEAN)
-1. pine_smart_compile через MCP — без подтверждений
-2. Если ошибка → исправить → повторить (макс 3 попытки)
-3. Если 3 попытки неудачны → СТОП → сообщить
-4. Прочитать proof label ETH 1H и BTC 1H через MCP
-5. Авто-валидация: если линий на графике < 3 → авто-откат
-6. Скриншот ETH 1H → latest_screenshot.png
-7. Imgur upload → получить URL
-8. dpaste upload → получить URL
-9. git add . && git commit && git push
-10. Обновить SESSION_STATE.md
-11. Вывести итог одним блоком
+1. pine_smart_compile через MCP
+2. Если ошибка → исправить автоматически → повторить
+3. Если после 3 попыток ошибка → СТОП → сообщить
+4. Прочитать proof label ETH 1H и BTC 1H
+5. Скриншот ETH 1H → D:\SMC_PROJECT_CLEAN\latest_screenshot.png
+6. Загрузить скрин: curl -s -X POST "https://api.imgur.com/3/image" -H "Authorization: Client-ID 546c25a59c58ad7" -F "image=@D:/SMC_PROJECT_CLEAN/latest_screenshot.png"
+7. Загрузить код: bash /d/SMC_PROJECT_CLEAN/push_to_paste.sh
+8. git add . && git commit -m "CLEAN описание" && git push origin main
+9. Вывести итог:
+   ✅ CLEAN-XX завершён
+   КОД: [dpaste URL]
+   СКРИН: [imgur URL]
+   ETH: POI=[state] PRIMARY=[state] OTE=[да/нет]
+   BTC: POI=[state] PRIMARY=[state]
 
 ## АВТО-ОТКАТ
-Если визуализация сломана после CLEAN →
-cp последний_AFTER_архив → core →
+Если после компиляции proof label показывает ошибку →
+автоматически восстановить последний AFTER архив →
 записать ROLLBACK в action log →
 сообщить причину
 
-## МОНИТОРИНГ (запускать каждые 30 минут)
-Проверять инструменты: BTCUSDT ETHUSDT ZECUSDT SOLUSDT BNBUSDT
-Условие алерта: POI_ACTIVE + PRIMARY_LOCKED + OTE=YES
-При нахождении → сообщить немедленно:
-🎯 СЕТАП: [инструмент] [TF] POI=[state] PRIMARY=[state] OTE=ДА
-
-## MULTI-INSTRUMENT SCANNER
-Команда: scan
-Проверить все инструменты из списка
-Вернуть таблицу состояний
-
 ## DEFINITION OF DONE — Layer 0+1
-Завершён когда на ETH 1H одновременно:
-✅ Зелёные POI линии видны (0/0.5/1)
-✅ Синяя PRIMARY стрелка BASE→TERMINAL видна
-✅ Зелёный OTE прямоугольник виден
-✅ Proof label корректен
-✅ Визуализация совпадает с эталоном пользователя
-✅ Проверено на минимум 3 инструментах
-
-## ПЕРЕХОД К LAYER 2
-Автоматически начинать Layer 2 когда Layer 0+1 DOD выполнен.
-Layer 2 = candidate detection (sweep candle в OTE).
-
-## АВТО-ПЕРЕЗАПУСК TRADINGVIEW
-Если tv_health_check возвращает ошибку →
-автоматически выполнить:
-! powershell -c "Start-Process 'C:\Program Files\WindowsApps\TradingView.Desktop_3.1.0.7818_x64__n534cwy3pjxzj\TradingView.exe' -ArgumentList '--remote-debugging-port=9222'"
-Подождать 10 секунд → повторить tv_health_check
-Макс 3 попытки → если не помогло → сообщить пользователю
-
-## СТАРТОВОЕ СООБЩЕНИЕ
-При старте новой сессии автоматически:
-1. Прочитать SESSION_STATE.md
-2. Вывести краткий статус проекта
-3. Вывести последний paste URL и imgur URL
-4. Написать: "Проект загружен. Последний CLEAN: [N]. Жду задание."
+Layer 0+1 считается завершённым когда:
+- На ETH 1H видны зелёные POI линии (0/0.5/1)
+- На ETH 1H видна синяя PRIMARY стрелка BASE→TERMINAL
+- На ETH 1H виден зелёный OTE прямоугольник
+- Proof label показывает корректные состояния
+- Визуализация совпадает с эталонным скрином пользователя
 
 ## ПУТИ
 core: D:\SMC_PROJECT_CLEAN\01_PINE\core\smc_clean_l0_core.pine
@@ -79,18 +51,11 @@ archive: D:\SMC_PROJECT_CLEAN\01_PINE\archive\
 tasks: D:\SMC_PROJECT_CLEAN\01_PINE\tasks_archive\
 analysis: D:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive\
 log: D:\SMC_PROJECT_CLEAN\01_PINE\analysis_archive\codex_actions_log.txt
-state: D:\SMC_PROJECT_CLEAN\SESSION_STATE.md
-
-## БЭКАП
-После каждого git push:
-xcopy D:\SMC_PROJECT_CLEAN "C:\Users\User\OneDrive\SMC_BACKUP\" /E /Y /Q
 
 ## АРХИВАЦИЯ
-BEFORE и AFTER архив обязателен.
+BEFORE и AFTER архив обязателен для каждого CLEAN.
 Формат: smc_clean_l0_core_[BEFORE/AFTER]_CLEAN[N]_[ДАТА].pine
-CLAUDE.md архивировать при каждом изменении:
-cp CLAUDE.md → D:\SMC_PROJECT_CLEAN\01_PINE\archive\CLAUDE_[ДАТА].md
 
 ## ПРОФИЛИ
-Profile A (1H/15m): POI=4H PRIMARY=1H CONFIRM=15m
-Profile B (4H/1D):  POI=1D PRIMARY=4H CONFIRM=1H
+Profile A (display 1H/15m): POI=4H PRIMARY=1H CONFIRM=15m
+Profile B (display 4H/1D):  POI=1D PRIMARY=4H CONFIRM=1H

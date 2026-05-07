@@ -6,34 +6,34 @@
 Время: 09:32 UTC
 
 ## Состояние индикатора
-Версия: 26.0
+Версия: 30.0
 Компиляция: SUCCESS
-Добавлен на график: NO (требуется ручное добавление)
+Добавлен на график: YES
 
 ## Визуализация
-ETH 1H POI: POI_ACTIVE (ожидается)
-ETH 1H PRIMARY: PRIMARY_LOCKED (ожидается)
-ETH 1H OTE: неизвестно (индикатор не на графике)
-Линий на графике: 0 (индикатор не добавлен)
-Визуализация работает: NO
+ETH 1H POI: POI_ACTIVE
+ETH 1H PRIMARY: PRIMARY_BROKEN
+ETH 1H OTE: NO
+Proof label: видим (51 labels на графике)
+Визуализация работает: YES
 
 ## Последние URL
-Код: https://dpaste.com/595MZYTDV
+Код: https://dpaste.com/595MZYTDV (dpaste временно недоступен)
 Скриншот: D:\SMC_PROJECT_CLEAN\latest_screenshot.png
 Imgur: недоступен (API заблокирован)
 
 ## Git
-Последний коммит: 4f8c851
+Последний коммит: d10ba71
 Ветка: main
 Статус: синхронизирован с remote
 
 ## Следующий шаг
-Добавить индикатор на график вручную через TradingView → Indicators → My Scripts → "SMC Clean Core L0"
-После добавления проверить визуализацию на ETH 1H
-Если визуализация корректна → запустить scanner на 5 инструментах
+Проверить визуализацию на BTC 1H и других инструментах
+Запустить scanner на 5 инструментах
+Проверить DOD критерии
 Если DOD выполнен → начать Layer 2
 
 ## Проблемы
-1. TradingView не добавляет индикатор автоматически после компиляции
+1. dpaste.com временно недоступен (502 backend error)
 2. Imgur API возвращает "forbidden" ошибку
-3. Pine Editor clipboard issue (resolved via dpaste workaround)
+3. PRIMARY_BROKEN на ETH 1H (ожидалось PRIMARY_LOCKED)
