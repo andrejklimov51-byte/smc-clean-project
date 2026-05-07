@@ -463,14 +463,6 @@ var float  poiHi    = na
 var float  poiLo    = na
 var int    poiActivatedBar = na
 
-// POI визуализация — объявления перед использованием
-var line poiLine0   = na
-var line poiLine50  = na
-var line poiLine100 = na
-var line poiArrow   = na
-var label poiLbl0   = na
-var label poiLbl100 = na
-
 var float  poiPrevHi        = na
 var float  poiPrevLo        = na
 var string poiBoundaryEvent = "NO_EVENT"
@@ -510,21 +502,6 @@ if poiState == POI_NONE
         poiLo           := math.min(poiBase, poiTerminal)
         poiState        := POI_ACTIVE
         poiActivatedBar := bar_index
-
-        // Рисуем POI линии ОДИН РАЗ при активации
-        if not na(poiLine0)   line.delete(poiLine0)
-        if not na(poiLine50)  line.delete(poiLine50)
-        if not na(poiLine100) line.delete(poiLine100)
-        if not na(poiArrow)   line.delete(poiArrow)
-
-        float pp0   = poiDir == 1 ? poiLo  : poiHi
-        float pp100 = poiDir == 1 ? poiHi  : poiLo
-        float pp50  = (pp0 + pp100) / 2
-
-        poiLine0   := line.new(bar_index, pp0,   bar_index, pp0,   extend=extend.both, color=color.new(color.green,30), width=1, style=line.style_dashed)
-        poiLine50  := line.new(bar_index, pp50,  bar_index, pp50,  extend=extend.both, color=color.new(color.green,50), width=1, style=line.style_dashed)
-        poiLine100 := line.new(bar_index, pp100, bar_index, pp100, extend=extend.both, color=color.new(color.green,30), width=1, style=line.style_dashed)
-        poiArrow   := line.new(bar_index - 3, pp0, bar_index, pp100, color=color.new(color.green,20), width=2, style=line.style_arrow_right)
 
 if poiState == POI_ACTIVE and poiStructureEvent == "STRUCTURE_BREAK"
     if not na(poiActivatedBar) and (bar_index - poiActivatedBar) >= 5
@@ -577,17 +554,6 @@ var float  primOwnerLo   = na
 var int    primOwnerStartBar = na
 var int    primOwnerTermBar  = na
 
-// PRIMARY визуализация — объявления перед использованием
-var line primLine0   = na
-var line primLine50  = na
-var line primLine705 = na
-var line primLine79  = na
-var line primLine100 = na
-var line primArrow   = na
-var box  primOteBox  = na
-var label primLblBase = na
-var label primLblTerm = na
-
 bool poiValid = poiState == POI_ACTIVE
 bool primCandidateReady = poiValid and curImpConfirmed and
      not na(curImpBase) and not na(curImpTerminal) and not na(curImpRange)
@@ -611,37 +577,6 @@ if primaryState == PRIMARY_CANDIDATE
     primOwnerLo          := math.min(primOwnerBase, primOwnerTerminalV)
     primOwnerStartBar    := primPendStartBar
     primOwnerTermBar     := primPendTermBar
-
-    // Рисуем PRIMARY линии ОДИН РАЗ при LOCK
-    int sBar = primPendStartBar
-    int tBar = primPendTermBar
-    float f0   = primOwnerDirV == 1 ? primOwnerLo  : primOwnerHi
-    float f100 = primOwnerDirV == 1 ? primOwnerHi  : primOwnerLo
-    float rng  = math.abs(f100 - f0)
-    float f50  = f0 + (primOwnerDirV == 1 ? rng*0.5   : -rng*0.5)
-    float f705 = f0 + (primOwnerDirV == 1 ? rng*0.295 : -rng*0.295)
-    float f79  = f0 + (primOwnerDirV == 1 ? rng*0.21  : -rng*0.21)
-
-    if not na(primLine0)   line.delete(primLine0)
-    if not na(primLine50)  line.delete(primLine50)
-    if not na(primLine705) line.delete(primLine705)
-    if not na(primLine79)  line.delete(primLine79)
-    if not na(primLine100) line.delete(primLine100)
-    if not na(primArrow)   line.delete(primArrow)
-    if not na(primOteBox)  box.delete(primOteBox)
-    if not na(primLblBase) label.delete(primLblBase)
-    if not na(primLblTerm) label.delete(primLblTerm)
-
-    if not na(sBar) and not na(tBar)
-        primLine0   := line.new(sBar, f0,   tBar, f0,   extend=extend.right, color=color.gray,                 width=2, style=line.style_solid)
-        primLine50  := line.new(sBar, f50,  tBar, f50,  extend=extend.right, color=color.new(color.blue,20),   width=1, style=line.style_dashed)
-        primLine705 := line.new(sBar, f705, tBar, f705, extend=extend.right, color=color.new(color.orange,20), width=1, style=line.style_dashed)
-        primLine79  := line.new(sBar, f79,  tBar, f79,  extend=extend.right, color=color.new(color.red,20),    width=1, style=line.style_dashed)
-        primLine100 := line.new(sBar, f100, tBar, f100, extend=extend.right, color=color.gray,                 width=2, style=line.style_solid)
-        primArrow   := line.new(sBar, f0,   tBar, f100, color=color.new(color.blue,20), width=2, style=line.style_arrow_right)
-        primOteBox  := box.new(tBar, f79, bar_index + 50, f50, border_color=color.new(color.green,40), border_width=1, bgcolor=color.new(color.green,85))
-        primLblBase := label.new(sBar, f0,   "BASE " + primaryLabel, style=label.style_label_up,   color=color.gray,   textcolor=color.white, size=size.small)
-        primLblTerm := label.new(tBar, f100, "ТЕРМИНАЛ " + primaryLabel, style=label.style_label_down, color=color.orange, textcolor=color.white, size=size.small)
 
 if primaryState == PRIMARY_LOCKED and structureEvent == "STRUCTURE_BREAK"
     primaryState := PRIMARY_BROKEN
@@ -716,9 +651,77 @@ float drawFib100 = fibActive ? fib100 : fibMem100
 // VISUAL LAYER — только последний сценарий
 // ============================================================
 
-// OTE box растягивается каждый бар
-if not na(primOteBox)
-    box.set_right(primOteBox, bar_index + 20)
+// POI — зелёный пунктир 0/0.5/1 + стрелка (только при POI_ACTIVE)
+var line poiLine0   = na
+var line poiLine50  = na
+var line poiLine100 = na
+var line poiArrow   = na
+var label poiLbl0   = na
+var label poiLbl100 = na
+
+if poiState == POI_ACTIVE and not na(poiHi) and not na(poiLo)
+    line.delete(poiLine0)
+    line.delete(poiLine50)
+    line.delete(poiLine100)
+    line.delete(poiArrow)
+    label.delete(poiLbl0)
+    label.delete(poiLbl100)
+    float p0   = poiDir == 1 ? poiLo  : poiHi
+    float p100 = poiDir == 1 ? poiHi  : poiLo
+    float p50  = (p0 + p100) / 2
+    poiLine0   := line.new(bar_index, p0,   bar_index, p0,   extend=extend.both, color=color.new(color.green,30), width=1, style=line.style_dashed)
+    poiLine50  := line.new(bar_index, p50,  bar_index, p50,  extend=extend.both, color=color.new(color.green,50), width=1, style=line.style_dashed)
+    poiLine100 := line.new(bar_index, p100, bar_index, p100, extend=extend.both, color=color.new(color.green,30), width=1, style=line.style_dashed)
+    int poiFrom = na(poiActivatedBar) ? bar_index - 200 : math.max(poiActivatedBar, bar_index - 500)
+    poiArrow   := line.new(poiFrom, p0, poiFrom + 5, p100,
+         color=color.new(color.green,20), width=3,
+         style=line.style_arrow_right)
+    poiLbl0    := label.new(bar_index, p0,   poiLabel + " 0",        style=label.style_label_left, color=color.new(color.green,60), textcolor=color.white, size=size.tiny)
+    poiLbl100  := label.new(bar_index, p100, poiLabel + " 1",        style=label.style_label_left, color=color.new(color.green,60), textcolor=color.white, size=size.tiny)
+
+// PRIMARY — fib линии + стрелка + OTE box (при LOCKED или BROKEN)
+var line primLine0   = na
+var line primLine50  = na
+var line primLine705 = na
+var line primLine79  = na
+var line primLine100 = na
+var line primArrow   = na
+var box  primOteBox  = na
+var label primLbl50  = na
+var label primLbl705 = na
+var label primLbl79  = na
+
+bool primVis = (primaryState == PRIMARY_LOCKED or primaryState == PRIMARY_BROKEN) and not na(drawFib0)
+
+if primVis
+    line.delete(primLine0)
+    line.delete(primLine50)
+    line.delete(primLine705)
+    line.delete(primLine79)
+    line.delete(primLine100)
+    line.delete(primArrow)
+    box.delete(primOteBox)
+    label.delete(primLbl50)
+    label.delete(primLbl705)
+    label.delete(primLbl79)
+    primLine0   := line.new(bar_index, drawFib0,   bar_index, drawFib0,   extend=extend.both, color=color.gray,                    width=2, style=line.style_solid)
+    primLine50  := line.new(bar_index, drawFib50,  bar_index, drawFib50,  extend=extend.both, color=color.new(color.blue,40),       width=1, style=line.style_dashed)
+    primLine705 := line.new(bar_index, drawFib705, bar_index, drawFib705, extend=extend.both, color=color.new(color.orange,30),     width=1, style=line.style_dashed)
+    primLine79  := line.new(bar_index, drawFib79,  bar_index, drawFib79,  extend=extend.both, color=color.new(color.red,20),        width=1, style=line.style_dashed)
+    primLine100 := line.new(bar_index, drawFib100, bar_index, drawFib100, extend=extend.both, color=color.gray,                    width=2, style=line.style_solid)
+    int primFrom = na(primOwnerStartBar) ? bar_index - 100 : primOwnerStartBar
+    int primTo   = na(primOwnerTermBar)  ? bar_index - 20  : primOwnerTermBar
+    if primFrom < bar_index - 499
+        primFrom := bar_index - 499
+    if primTo < bar_index - 498
+        primTo := bar_index - 498
+    primArrow   := line.new(primFrom, drawFib0, primTo, drawFib100,
+         color=color.new(color.blue,20), width=2,
+         style=line.style_arrow_right)
+    primOteBox  := box.new(primTo, drawFib79, bar_index + 20, drawFib50, border_color=color.new(color.green,50), border_width=1, bgcolor=color.new(color.green,85))
+    primLbl50   := label.new(bar_index, drawFib50,  primaryLabel + " 0.5",     style=label.style_label_left, color=color.new(color.blue,60),   textcolor=color.white, size=size.tiny)
+    primLbl705  := label.new(bar_index, drawFib705, primaryLabel + " 0.705",   style=label.style_label_left, color=color.new(color.orange,50), textcolor=color.white, size=size.tiny)
+    primLbl79   := label.new(bar_index, drawFib79,  primaryLabel + " 0.79 OTE",style=label.style_label_left, color=color.new(color.red,40),    textcolor=color.white, size=size.tiny)
 
 // OTE bgcolor
 bgcolor(priceInOte ? color.new(color.green, 92) : na, title="OTE")

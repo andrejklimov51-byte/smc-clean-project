@@ -463,14 +463,6 @@ var float  poiHi    = na
 var float  poiLo    = na
 var int    poiActivatedBar = na
 
-// POI визуализация — объявления перед использованием
-var line poiLine0   = na
-var line poiLine50  = na
-var line poiLine100 = na
-var line poiArrow   = na
-var label poiLbl0   = na
-var label poiLbl100 = na
-
 var float  poiPrevHi        = na
 var float  poiPrevLo        = na
 var string poiBoundaryEvent = "NO_EVENT"
@@ -576,17 +568,6 @@ var float  primOwnerHi   = na
 var float  primOwnerLo   = na
 var int    primOwnerStartBar = na
 var int    primOwnerTermBar  = na
-
-// PRIMARY визуализация — объявления перед использованием
-var line primLine0   = na
-var line primLine50  = na
-var line primLine705 = na
-var line primLine79  = na
-var line primLine100 = na
-var line primArrow   = na
-var box  primOteBox  = na
-var label primLblBase = na
-var label primLblTerm = na
 
 bool poiValid = poiState == POI_ACTIVE
 bool primCandidateReady = poiValid and curImpConfirmed and
@@ -715,6 +696,25 @@ float drawFib100 = fibActive ? fib100 : fibMem100
 // ============================================================
 // VISUAL LAYER — только последний сценарий
 // ============================================================
+
+// POI — зелёный пунктир 0/0.5/1 + стрелка (рисуется ОДИН РАЗ при активации)
+var line poiLine0   = na
+var line poiLine50  = na
+var line poiLine100 = na
+var line poiArrow   = na
+var label poiLbl0   = na
+var label poiLbl100 = na
+
+// PRIMARY — fib линии + стрелка + OTE box (рисуется ОДИН РАЗ при LOCK)
+var line primLine0   = na
+var line primLine50  = na
+var line primLine705 = na
+var line primLine79  = na
+var line primLine100 = na
+var line primArrow   = na
+var box  primOteBox  = na
+var label primLblBase = na
+var label primLblTerm = na
 
 // OTE box растягивается каждый бар
 if not na(primOteBox)
