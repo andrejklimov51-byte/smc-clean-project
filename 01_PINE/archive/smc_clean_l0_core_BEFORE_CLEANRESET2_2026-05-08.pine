@@ -550,31 +550,6 @@ if poiState == POI_STALE and poiRawConfirmed
     poiState        := POI_ACTIVE
     poiActivatedBar := bar_index
 
-    // Визуализация POI при STALE → ACTIVE
-    if not na(poiLine0)
-        line.delete(poiLine0)
-    if not na(poiLine50)
-        line.delete(poiLine50)
-    if not na(poiLine100)
-        line.delete(poiLine100)
-    if not na(poiArrow)
-        line.delete(poiArrow)
-    if not na(poiLbl0)
-        label.delete(poiLbl0)
-    if not na(poiLbl100)
-        label.delete(poiLbl100)
-
-    float pp0 = poiDir == 1 ? poiLo : poiHi
-    float pp100 = poiDir == 1 ? poiHi : poiLo
-    float pp50 = (pp0 + pp100) / 2
-
-    poiLine0 := line.new(bar_index, pp0, bar_index, pp0, extend=extend.both, color=color.new(color.green, 0), width=1, style=line.style_solid)
-    poiLine50 := line.new(bar_index, pp50, bar_index, pp50, extend=extend.both, color=color.new(color.green, 50), width=1, style=line.style_dotted)
-    poiLine100 := line.new(bar_index, pp100, bar_index, pp100, extend=extend.both, color=color.new(color.green, 0), width=1, style=line.style_solid)
-    poiArrow := line.new(bar_index - 3, pp0, bar_index, pp100, color=color.new(color.green, 30), width=2, style=line.style_arrow_right)
-    poiLbl0 := label.new(bar_index, pp0, "POI 0", color=color.new(color.green, 70), textcolor=color.white, style=label.style_label_left, size=size.small)
-    poiLbl100 := label.new(bar_index, pp100, "POI 1", color=color.new(color.green, 70), textcolor=color.white, style=label.style_label_left, size=size.small)
-
 if poiState == POI_BROKEN and poiRawConfirmed
     poiBase     := poiRawBase
     poiTerminal := poiRawTerminal
@@ -587,31 +562,6 @@ if poiState == POI_BROKEN and poiRawConfirmed
 if poiState == POI_REPLACED
     poiState        := POI_ACTIVE
     poiActivatedBar := bar_index
-
-    // Визуализация POI при REPLACED → ACTIVE
-    if not na(poiLine0)
-        line.delete(poiLine0)
-    if not na(poiLine50)
-        line.delete(poiLine50)
-    if not na(poiLine100)
-        line.delete(poiLine100)
-    if not na(poiArrow)
-        line.delete(poiArrow)
-    if not na(poiLbl0)
-        label.delete(poiLbl0)
-    if not na(poiLbl100)
-        label.delete(poiLbl100)
-
-    float pp0 = poiDir == 1 ? poiLo : poiHi
-    float pp100 = poiDir == 1 ? poiHi : poiLo
-    float pp50 = (pp0 + pp100) / 2
-
-    poiLine0 := line.new(bar_index, pp0, bar_index, pp0, extend=extend.both, color=color.new(color.green, 0), width=1, style=line.style_solid)
-    poiLine50 := line.new(bar_index, pp50, bar_index, pp50, extend=extend.both, color=color.new(color.green, 50), width=1, style=line.style_dotted)
-    poiLine100 := line.new(bar_index, pp100, bar_index, pp100, extend=extend.both, color=color.new(color.green, 0), width=1, style=line.style_solid)
-    poiArrow := line.new(bar_index - 3, pp0, bar_index, pp100, color=color.new(color.green, 30), width=2, style=line.style_arrow_right)
-    poiLbl0 := label.new(bar_index, pp0, "POI 0", color=color.new(color.green, 70), textcolor=color.white, style=label.style_label_left, size=size.small)
-    poiLbl100 := label.new(bar_index, pp100, "POI 1", color=color.new(color.green, 70), textcolor=color.white, style=label.style_label_left, size=size.small)
 
 // ============================================================
 // PRIMARY OWNERSHIP ENGINE

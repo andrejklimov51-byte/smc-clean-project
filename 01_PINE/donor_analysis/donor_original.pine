@@ -1,0 +1,965 @@
+//@version=6
+indicator("SMC Core Detector L0 Completion Rule Reachable", overlay=true, max_labels_count=20, max_lines_count=20)
+
+// 1. INPUTS
+pivotLen = input.int(3, "Pivot Length", minval=1)
+freezeAtrLen = input.int(14, "Freeze ATR Length", minval=1)
+freezeAtrFactor = input.float(0.15, "Freeze Min Pullback ATR Factor", minval=0.0, maxval=2.0, step=0.05)
+freezeSequenceLen = input.int(2, "Freeze Opposite Sequence Bars", minval=1, maxval=5)
+dominanceRangeFrac = 0.25
+minRelativeRangeFrac = 0.35
+
+// 1.5 FIXED MTF MAP / IMPULSE SNAPSHOT
+f_latest_confirmed_impulse(_pivotLen, _freezeAtrLen, _freezeAtrFactor, _freezeSequenceLen) =>
+    _atrValue = ta.atr(_freezeAtrLen)
+    _minFreezePullback = _atrValue * _freezeAtrFactor
+
+    _pivotLowPrice = ta.pivotlow(low, _pivotLen, _pivotLen)
+    _pivotHighPrice = ta.pivothigh(high, _pivotLen, _pivotLen)
+    _newPivotLow = not na(_pivotLowPrice)
+    _newPivotHigh = not na(_pivotHighPrice)
+
+    int _pivotLowTime = _newPivotLow ? time[_pivotLen] : na
+    int _pivotHighTime = _newPivotHigh ? time[_pivotLen] : na
+
+    var int _bullBaseTime = na
+    var float _bullBasePrice = na
+    var int _bullTerminalTime = na
+    var float _bullTerminalPrice = na
+    var float _bullPostTerminalLow = na
+    var int _bullPostTerminalLowTime = na
+    var int _bullBearishSeq = 0
+
+    var int _bearBaseTime = na
+    var float _bearBasePrice = na
+    var int _bearTerminalTime = na
+    var float _bearTerminalPrice = na
+    var float _bearPostTerminalHigh = na
+    var int _bearPostTerminalHighTime = na
+    var int _bearBullishSeq = 0
+
+    var bool _primaryExists = false
+    var int _primaryStartTime = na
+    var int _primaryProvisionalEndTime = na
+    var int _primaryConfirmedEndTime = na
+    var float _primaryLow = na
+    var float _primaryHigh = na
+    var int _primaryDir = 0
+    var float _primaryRange = na
+    var bool _primaryConfirmed = false
+    var int _primaryCompletionTime = na
+    var float _primaryCompletionPrice = na
+    var float _primaryCorrectionExtreme = na
+    var int _primaryCorrectionTime = na
+
+    bool _completedLegNow = false
+    int _completedStartTime = na
+    int _completedTerminalTime = na
+    float _completedLow = na
+    float _completedHigh = na
+    int _completedDir = 0
+    float _completedRange = na
+    int _completedPublicationTime = na
+    float _completedPublicationPrice = na
+
+    if not na(_bullTerminalTime) and time > _bullTerminalTime
+        if na(_bullPostTerminalLow) or low < _bullPostTerminalLow
+            _bullPostTerminalLow := low
+            _bullPostTerminalLowTime := time
+        _bullBearishSeq := close < open ? _bullBearishSeq + 1 : 0
+    else
+        _bullPostTerminalLow := na
+        _bullPostTerminalLowTime := na
+        _bullBearishSeq := 0
+
+    if not na(_bearTerminalTime) and time > _bearTerminalTime
+        if na(_bearPostTerminalHigh) or high > _bearPostTerminalHigh
+            _bearPostTerminalHigh := high
+            _bearPostTerminalHighTime := time
+        _bearBullishSeq := close > open ? _bearBullishSeq + 1 : 0
+    else
+        _bearPostTerminalHigh := na
+        _bearPostTerminalHighTime := na
+        _bearBullishSeq := 0
+
+    bool _bullHasSmallPullback = not na(_bullPostTerminalLow) and not na(_bullTerminalPrice) and _bullTerminalPrice - _bullPostTerminalLow > _minFreezePullback
+    bool _bearHasSmallBounce = not na(_bearPostTerminalHigh) and not na(_bearTerminalPrice) and _bearPostTerminalHigh - _bearTerminalPrice > _minFreezePullback
+
+    bool _bullSequenceFreezeNow = not na(_bullBaseTime) and not na(_bullTerminalTime) and _bullTerminalPrice > _bullBasePrice and time > _bullTerminalTime and _bullHasSmallPullback and _bullBearishSeq >= _freezeSequenceLen
+    if _bullSequenceFreezeNow
+        if not _completedLegNow or _bullTerminalTime > _completedTerminalTime
+            _completedLegNow := true
+            _completedStartTime := _bullBaseTime
+            _completedTerminalTime := _bullTerminalTime
+            _completedLow := _bullBasePrice
+            _completedHigh := _bullTerminalPrice
+            _completedDir := 1
+            _completedRange := _bullTerminalPrice - _bullBasePrice
+            _completedPublicationTime := time
+            _completedPublicationPrice := close
+
+    bool _bearSequenceFreezeNow = not na(_bearBaseTime) and not na(_bearTerminalTime) and _bearBasePrice > _bearTerminalPrice and time > _bearTerminalTime and _bearHasSmallBounce and _bearBullishSeq >= _freezeSequenceLen
+    if _bearSequenceFreezeNow
+        if not _completedLegNow or _bearTerminalTime > _completedTerminalTime
+            _completedLegNow := true
+            _completedStartTime := _bearBaseTime
+            _completedTerminalTime := _bearTerminalTime
+            _completedLow := _bearTerminalPrice
+            _completedHigh := _bearBasePrice
+            _completedDir := -1
+            _completedRange := _bearBasePrice - _bearTerminalPrice
+            _completedPublicationTime := time
+            _completedPublicationPrice := close
+
+    if _newPivotLow
+        bool _bearHigherLowFreeze = not na(_bearBaseTime) and not na(_bearTerminalTime) and _pivotLowTime > _bearTerminalTime and _pivotLowPrice > _bearTerminalPrice and _bearHasSmallBounce
+        if _bearHigherLowFreeze
+            float _bearLegRange = _bearBasePrice - _bearTerminalPrice
+            if _bearLegRange > syminfo.mintick
+                if not _completedLegNow or _bearTerminalTime > _completedTerminalTime
+                    _completedLegNow := true
+                    _completedStartTime := _bearBaseTime
+                    _completedTerminalTime := _bearTerminalTime
+                    _completedLow := _bearTerminalPrice
+                    _completedHigh := _bearBasePrice
+                    _completedDir := -1
+                    _completedRange := _bearLegRange
+                    _completedPublicationTime := time
+                    _completedPublicationPrice := close
+
+        _bullBaseTime := _pivotLowTime
+        _bullBasePrice := _pivotLowPrice
+        _bullTerminalTime := na
+        _bullTerminalPrice := na
+        _bullPostTerminalLow := na
+        _bullPostTerminalLowTime := na
+        _bullBearishSeq := 0
+
+        if not na(_bearBaseTime) and _bearBaseTime < _pivotLowTime
+            if na(_bearTerminalTime) or _pivotLowPrice < _bearTerminalPrice
+                _bearTerminalTime := _pivotLowTime
+                _bearTerminalPrice := _pivotLowPrice
+                _bearPostTerminalHigh := na
+                _bearPostTerminalHighTime := na
+                _bearBullishSeq := 0
+
+    if _newPivotHigh
+        bool _bullLowerHighFreeze = not na(_bullBaseTime) and not na(_bullTerminalTime) and _pivotHighTime > _bullTerminalTime and _pivotHighPrice < _bullTerminalPrice and _bullHasSmallPullback
+        if _bullLowerHighFreeze
+            float _bullLegRange = _bullTerminalPrice - _bullBasePrice
+            if _bullLegRange > syminfo.mintick
+                if not _completedLegNow or _bullTerminalTime > _completedTerminalTime
+                    _completedLegNow := true
+                    _completedStartTime := _bullBaseTime
+                    _completedTerminalTime := _bullTerminalTime
+                    _completedLow := _bullBasePrice
+                    _completedHigh := _bullTerminalPrice
+                    _completedDir := 1
+                    _completedRange := _bullLegRange
+                    _completedPublicationTime := time
+                    _completedPublicationPrice := close
+
+        _bearBaseTime := _pivotHighTime
+        _bearBasePrice := _pivotHighPrice
+        _bearTerminalTime := na
+        _bearTerminalPrice := na
+        _bearPostTerminalHigh := na
+        _bearPostTerminalHighTime := na
+        _bearBullishSeq := 0
+
+        if not na(_bullBaseTime) and _bullBaseTime < _pivotHighTime
+            if na(_bullTerminalTime) or _pivotHighPrice > _bullTerminalPrice
+                _bullTerminalTime := _pivotHighTime
+                _bullTerminalPrice := _pivotHighPrice
+                _bullPostTerminalLow := na
+                _bullPostTerminalLowTime := na
+                _bullBearishSeq := 0
+
+    bool _newerCompletedLeg = _completedLegNow and _completedRange > syminfo.mintick and (not _primaryExists or na(_primaryProvisionalEndTime) or _completedTerminalTime > _primaryProvisionalEndTime)
+    if _newerCompletedLeg
+        _primaryExists := true
+        _primaryStartTime := _completedStartTime
+        _primaryProvisionalEndTime := _completedTerminalTime
+        _primaryConfirmedEndTime := na
+        _primaryLow := _completedLow
+        _primaryHigh := _completedHigh
+        _primaryDir := _completedDir
+        _primaryRange := _completedRange
+        _primaryConfirmed := false
+        _primaryCompletionTime := _completedPublicationTime
+        _primaryCompletionPrice := _completedPublicationPrice
+        _primaryCorrectionExtreme := _completedDir == 1 ? _bullPostTerminalLow : _bearPostTerminalHigh
+        _primaryCorrectionTime := _completedDir == 1 ? _bullPostTerminalLowTime : _bearPostTerminalHighTime
+        float _primaryCorrectionThresholdAtBirth = _completedDir == 1 ? _completedHigh - _completedRange * 0.5 : _completedLow + _completedRange * 0.5
+        bool _primaryCorrectionReachedAtBirth = _completedDir == 1 ? not na(_primaryCorrectionExtreme) and _primaryCorrectionExtreme <= _primaryCorrectionThresholdAtBirth : not na(_primaryCorrectionExtreme) and _primaryCorrectionExtreme >= _primaryCorrectionThresholdAtBirth
+        if _primaryCorrectionReachedAtBirth
+            _primaryConfirmed := true
+            _primaryConfirmedEndTime := na(_primaryCorrectionTime) ? _primaryCompletionTime : _primaryCorrectionTime
+
+    if _primaryExists and not _primaryConfirmed and not na(_primaryProvisionalEndTime) and time > _primaryProvisionalEndTime
+        if _primaryDir == 1
+            if na(_primaryCorrectionExtreme) or low < _primaryCorrectionExtreme
+                _primaryCorrectionExtreme := low
+                _primaryCorrectionTime := time
+        else if _primaryDir == -1
+            if na(_primaryCorrectionExtreme) or high > _primaryCorrectionExtreme
+                _primaryCorrectionExtreme := high
+                _primaryCorrectionTime := time
+
+    bool _bullConfirmedNow = _primaryExists and not _primaryConfirmed and _primaryDir == 1 and _primaryRange > syminfo.mintick and not na(_primaryCorrectionExtreme) and _primaryCorrectionExtreme <= _primaryHigh - _primaryRange * 0.5
+    bool _bearConfirmedNow = _primaryExists and not _primaryConfirmed and _primaryDir == -1 and _primaryRange > syminfo.mintick and not na(_primaryCorrectionExtreme) and _primaryCorrectionExtreme >= _primaryLow + _primaryRange * 0.5
+    if _bullConfirmedNow or _bearConfirmedNow
+        _primaryConfirmed := true
+        _primaryConfirmedEndTime := na(_primaryCorrectionTime) ? time : _primaryCorrectionTime
+
+    [_primaryExists and _primaryConfirmed, _primaryStartTime, _primaryProvisionalEndTime, _primaryConfirmedEndTime, _primaryLow, _primaryHigh, _primaryDir, _primaryRange, _primaryCompletionTime, _primaryCompletionPrice]
+
+// 2. CORE SERIES
+currentChartTimeframe = timeframe.period
+chartTimeframeSeconds = timeframe.in_seconds(timeframe.period)
+profileId = "PROFILE_4H_POI_1H_PRIMARY_15M_CONFIRM"
+profileLabel = "4H POI -> 1H PRIMARY -> 15m CONFIRM"
+profilePoiTimeframe = "240"
+profilePrimaryTimeframe = "60"
+profileConfirmTimeframe = "15"
+profilePoiLabel = "4H"
+profilePrimaryLabel = "1H"
+profileConfirmLabel = "15m"
+anchorTimeframe = profilePoiTimeframe
+structuralTimeframe = profilePrimaryTimeframe
+confirmTimeframe = profileConfirmTimeframe
+mtfMappingRule = profileLabel
+roleProfileProof = profileLabel
+roleDisplayProof = currentChartTimeframe
+rolePoiProof = profilePoiLabel
+rolePrimaryProof = profilePrimaryLabel
+roleConfirmProof = profileConfirmLabel
+roleProfileProofRu = "4H POI -> 1H ОСН. -> 15m ПОДТВ."
+// 6. ACTIVE VISUALS
+const int VIS_TRANS_POI_BOX = 88
+const int VIS_TRANS_PRIMARY_BOX = 88
+const int VIS_TRANS_PROOF_LABEL = 72
+const int VIS_TRANS_STATE_LABEL = 25
+const int VIS_TRANS_TRACE_BG = 92
+const int VIS_TRANS_TRACE_TEXT = 15
+const bool traceTimingEnabled = false
+const bool traceTimingCompact = true
+const bool protectedLevelDebugEnabled = true
+const bool protectedLevelShow079Compare = true
+
+// RU DISPLAY HELPERS — VISUAL TEXT ONLY
+f_ruBool(_b) =>
+    _b ? "ДА" : "НЕТ"
+
+f_ruOwnerState(_s) =>
+    _s == "CURRENT" ? "ТЕКУЩИЙ" :
+     _s == "PREVIOUS" ? "ПРЕДЫДУЩИЙ" :
+     _s == "PREVIOUS_AFTER_ROLLBACK" ? "ПРЕД. ПОСЛЕ ОТКАТА" :
+     _s == "NONE" ? "НЕТ" : _s
+
+f_ruLockState(_s) =>
+    _s == "LOCKED" ? "ЗАФИКСИРОВАН" :
+     _s == "BROKEN" ? "СЛОМАН" :
+     _s == "INACTIVE" ? "НЕАКТИВЕН" :
+     _s == "NONE" ? "НЕТ" : _s
+
+f_ruPoiState(_s) =>
+    _s == "REFERENCE" ? "ОПОРНЫЙ" :
+     _s == "ACTIVE" ? "АКТИВНЫЙ" :
+     _s == "BROKEN" ? "СЛОМАН" :
+     _s == "STALE" ? "УСТАРЕЛ" :
+     _s == "NONE" ? "НЕТ" : _s
+
+f_ruNextConfirm(_s) =>
+    _s == "TAKEOVER_ALLOWED" ? "ПЕРЕХВАТ РАЗРЕШЁН" :
+     _s == "PREVIOUS_BROKEN" ? "ПРЕДЫДУЩИЙ СЛОМАН" :
+     _s == "OUT_OF_ANCHOR_EXPANSION" ? "ВНЕ ЯКОРЯ" :
+     _s == "SAME_AS_TRACKED" ? "КАК ОТСЛЕЖ." :
+     _s == "NO_ANCHOR" ? "НЕТ ЯКОРЯ" :
+     _s == "WAIT_NEW_ANCHOR" ? "ЖДЁМ НОВЫЙ ЯКОРЬ" :
+     _s == "RAW_INVALID" ? "НЕВАЛИДНЫЙ RAW" :
+     _s == "NOT_NESTED" ? "НЕ ВНУТРИ POI" :
+     _s == "SAME_AS_ANCHOR" ? "КАК ЯКОРЬ" :
+     _s == "NOT_LATER" ? "НЕ ПОЗЖЕ ТЕКУЩ." :
+     _s == "RANGE_TOO_SMALL" ? "ДИАПАЗОН МАЛ" :
+     _s == "INTERNAL_MICRO_LEG" ? "ВНУТР. МИКРО-ИМПУЛЬС" :
+     _s == "CORRECTION_INVALID" ? "КОРРЕКЦИЯ НЕВАЛИДНА" :
+     _s == "NO_DOMINANCE" ? "НЕТ ДОМИНИРОВАНИЯ" :
+     _s == "UNKNOWN" ? "НЕИЗВЕСТНО" :
+     _s == "NONE" ? "НЕТ" : _s
+
+f_ruRearmState(_s) =>
+    _s == "REARM_LOCKED_CURRENT" ? "ТЕКУЩИЙ ЗАФИКС." :
+     _s == "WAIT_PRIMARY_IN_POI" ? "ЖДЁМ 1H В POI" :
+     _s == "WAIT_NEW_POI" ? "ЖДЁМ НОВЫЙ POI" :
+     _s == "REARM_NONE_OFF" ? "ВЫКЛ." :
+     _s == "NONE" ? "НЕТ" : _s
+
+f_ruRearmReason(_s) =>
+    _s == "1H_PRIMARY_OWNER_ACTIVE" ? "1H ОСН. АКТИВЕН" :
+     _s == "PRIMARY_BROKEN_ROLLBACK_TO_POI" ? "СЛОМ ОСН. -> ОТКАТ К POI" :
+     _s == "PRIMARY_BROKEN_POI_INVALID" ? "СЛОМ ОСН., POI НЕВАЛИДЕН" :
+     _s == "NO_VALID_4H_POI" ? "НЕТ ВАЛИДНОГО 4H POI" :
+     _s == "VALID_4H_POI_WAIT_1H_PRIMARY" ? "ЖДЁМ 1H ОСН. В POI" :
+     _s == "4H_POI_OWNER_WAIT_1H_PRIMARY" ? "POI ВЛАДЕЛЕЦ, ЖДЁМ 1H" :
+     _s == "NO_REARM_NEEDED" ? "ПЕРЕЗАПУСК НЕ НУЖЕН" : _s
+
+f_ruBreakState(_s) =>
+    _s == "NO_BREAK" ? "НЕТ СЛОМА" :
+     _s == "BROKEN_PRIMARY_ROLLBACK_TO_POI" ? "СЛОМ ОСН. -> ОТКАТ К POI" :
+     _s == "BROKEN_PRIMARY_OWNER_NONE" ? "СЛОМ ОСН. -> ВЛАДЕЛЕЦ НЕТ" :
+     _s == "BROKEN_PRIMARY" ? "СЛОМ ОСН." : _s
+
+f_ruBreakMode(_s) =>
+    _s == "CURRENT_PRIMARY_FIB79_15M_WICK" ? "ТЕКУЩАЯ ОСН. FIB79 / 15m ТЕНЬ" :
+     _s == "NO_BREAK_LEVEL" ? "НЕТ УРОВНЯ СЛОМА" : _s
+
+f_ruProtectedSource(_s) =>
+    _s == "15M_SWING_LOW_IN_1H_PRIMARY" ? "15m SWING LOW В 1H ОСН." :
+     _s == "15M_SWING_HIGH_IN_1H_PRIMARY" ? "15m SWING HIGH В 1H ОСН." :
+     _s == "NO_PROTECTED_SWING" ? "НЕТ ЗАЩ. SWING" :
+     _s == "NONE" ? "НЕТ" : _s
+
+f_ruProtectedMissingReason(_s) =>
+    _s == "NO_CURRENT_PRIMARY" ? "НЕТ ТЕКУЩ. ОСН." :
+     _s == "PRIMARY_CONTEXT_INCOMPLETE" ? "КОНТЕКСТ ОСН. НЕПОЛОН" :
+     _s == "NO_15M_SWING_LOW" ? "НЕТ 15m SWING LOW" :
+     _s == "NO_15M_SWING_HIGH" ? "НЕТ 15m SWING HIGH" :
+     _s == "SWING_BEFORE_PRIMARY_LOCK" ? "SWING ДО ФИКСАЦИИ ОСН." :
+     _s == "SWING_OUTSIDE_PRIMARY_RANGE" ? "SWING ВНЕ ДИАПАЗОНА ОСН." :
+     _s == "NONE" ? "НЕТ" : _s
+
+var line previousAnchorBaseLine = na
+var line previousAnchorTerminalLine = na
+var label lblPreviousAnchorBase = na
+var label lblPreviousAnchorTerminal = na
+var line currentPrimaryBaseLine = na
+var line currentPrimaryTerminalLine = na
+var label lblCurrentPrimaryBase = na
+var label lblCurrentPrimaryTerminal = na
+var label lblCurrentPrimaryState = na
+var label lblOwnerProof = na
+var line finalFibLine0 = na
+var line finalFibLine50 = na
+var line finalFibLine705 = na
+var line finalFibLine79 = na
+var line finalFibLine1 = na
+var line finalPrimaryBreakLine = na
+var label finalLblPrimaryBreak = na
+var line finalProtectedLevelLine = na
+var label finalLblProtectedLevel = na
+var line finalTemp079Line = na
+var label finalLblTemp079 = na
+var int protectedDebugTrackedPrimaryStartTime = na
+var int protectedDebugTrackedPrimaryConfirmedEndTime = na
+var int protectedDebugTrackedPrimaryDir = 0
+var float protectedDebugHeldLevel = na
+var int protectedDebugHeldTime = na
+var bool protectedDebugHeldValid = false
+var string protectedDebugHeldSource = "NONE"
+var bool finalFibVisualMemoryValid = false
+var string finalFibVisualMemorySource = "NONE"
+var float finalFibVisualMemoryBasePrice = na
+var float finalFibVisualMemoryTerminalPrice = na
+var int finalFibVisualMemoryBaseTime = na
+var int finalFibVisualMemoryTerminalTime = na
+
+var bool mtfCurrentPrimaryExists = false
+var int mtfCurrentPrimaryStartTime = na
+var int mtfCurrentPrimaryProvisionalEndTime = na
+var int mtfCurrentPrimaryConfirmedEndTime = na
+var float mtfCurrentPrimaryLow = na
+var float mtfCurrentPrimaryHigh = na
+var int mtfCurrentPrimaryDir = 0
+var float mtfCurrentPrimaryRange = na
+var int mtfCurrentPrimaryCompletionTime = na
+var float mtfCurrentPrimaryCompletionPrice = na
+var bool mtfCurrentPrimaryActive = false
+var bool mtfCurrentPrimaryBroken = false
+var bool mtfRollbackToPreviousAnchor = false
+var int mtfTrackedAnchorStartTime = na
+var int mtfTrackedAnchorConfirmedEndTime = na
+var int mtfTrackedAnchorDir = 0
+var int mtfLastPrimaryBreakTime = na
+
+// 16. FIXED MTF PREVIOUS/CURRENT PRIMARY + BREAK ROLLBACK ARCHITECTURE
+[mtfPreviousPrimaryAnchorExistsRaw, mtfPreviousPrimaryStartTimeRaw, mtfPreviousPrimaryProvisionalEndTimeRaw, mtfPreviousPrimaryConfirmedEndTimeRaw, mtfPreviousPrimaryLowRaw, mtfPreviousPrimaryHighRaw, mtfPreviousPrimaryDirRaw, mtfPreviousPrimaryRangeRaw, mtfPreviousPrimaryCompletionTimeRaw, mtfPreviousPrimaryCompletionPriceRaw] = request.security(syminfo.tickerid, anchorTimeframe, f_latest_confirmed_impulse(pivotLen, freezeAtrLen, freezeAtrFactor, freezeSequenceLen), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[mtfCurrentPrimaryExistsRaw, mtfCurrentPrimaryStartTimeRaw, mtfCurrentPrimaryProvisionalEndTimeRaw, mtfCurrentPrimaryConfirmedEndTimeRaw, mtfCurrentPrimaryLowRaw, mtfCurrentPrimaryHighRaw, mtfCurrentPrimaryDirRaw, mtfCurrentPrimaryRangeRaw, mtfCurrentPrimaryCompletionTimeRaw, mtfCurrentPrimaryCompletionPriceRaw] = request.security(syminfo.tickerid, structuralTimeframe, f_latest_confirmed_impulse(pivotLen, freezeAtrLen, freezeAtrFactor, freezeSequenceLen), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+bool previousPrimaryAnchorExistsNow = mtfPreviousPrimaryAnchorExistsRaw and not na(mtfPreviousPrimaryStartTimeRaw) and not na(mtfPreviousPrimaryProvisionalEndTimeRaw) and not na(mtfPreviousPrimaryConfirmedEndTimeRaw) and not na(mtfPreviousPrimaryLowRaw) and not na(mtfPreviousPrimaryHighRaw) and mtfPreviousPrimaryDirRaw != 0 and not na(mtfPreviousPrimaryRangeRaw) and mtfPreviousPrimaryRangeRaw > syminfo.mintick
+bool currentPrimaryRawExistsNow = mtfCurrentPrimaryExistsRaw and not na(mtfCurrentPrimaryStartTimeRaw) and not na(mtfCurrentPrimaryProvisionalEndTimeRaw) and not na(mtfCurrentPrimaryConfirmedEndTimeRaw) and not na(mtfCurrentPrimaryLowRaw) and not na(mtfCurrentPrimaryHighRaw) and mtfCurrentPrimaryDirRaw != 0 and not na(mtfCurrentPrimaryRangeRaw) and mtfCurrentPrimaryRangeRaw > syminfo.mintick
+bool currentPrimaryNestedInAnchor = previousPrimaryAnchorExistsNow and currentPrimaryRawExistsNow and mtfCurrentPrimaryStartTimeRaw >= mtfPreviousPrimaryStartTimeRaw and mtfCurrentPrimaryLowRaw >= mtfPreviousPrimaryLowRaw - syminfo.mintick and mtfCurrentPrimaryHighRaw <= mtfPreviousPrimaryHighRaw + syminfo.mintick
+bool currentPrimaryDistinctFromAnchor = currentPrimaryNestedInAnchor and (mtfCurrentPrimaryStartTimeRaw != mtfPreviousPrimaryStartTimeRaw or mtfCurrentPrimaryConfirmedEndTimeRaw != mtfPreviousPrimaryConfirmedEndTimeRaw or mtfCurrentPrimaryDirRaw != mtfPreviousPrimaryDirRaw or math.abs(mtfCurrentPrimaryRangeRaw - mtfPreviousPrimaryRangeRaw) > syminfo.mintick)
+bool currentPrimaryValidNow = currentPrimaryNestedInAnchor and currentPrimaryDistinctFromAnchor
+bool currentPrimaryStructurallyValid = previousPrimaryAnchorExistsNow and currentPrimaryRawExistsNow and currentPrimaryNestedInAnchor and currentPrimaryDistinctFromAnchor
+bool currentPrimaryCorrectionValid = currentPrimaryStructurallyValid and not na(mtfCurrentPrimaryConfirmedEndTimeRaw)
+bool trackedCurrentPrimaryExistsNow = mtfCurrentPrimaryExists and not na(mtfCurrentPrimaryStartTime) and not na(mtfCurrentPrimaryProvisionalEndTime) and not na(mtfCurrentPrimaryConfirmedEndTime) and not na(mtfCurrentPrimaryLow) and not na(mtfCurrentPrimaryHigh) and mtfCurrentPrimaryDir != 0 and not na(mtfCurrentPrimaryRange) and mtfCurrentPrimaryRange > syminfo.mintick
+bool currentPrimaryTrackedOwnerExists = trackedCurrentPrimaryExistsNow and mtfCurrentPrimaryActive and not mtfCurrentPrimaryBroken
+bool rawCurrentPrimaryDistinctFromTracked = currentPrimaryStructurallyValid and (not trackedCurrentPrimaryExistsNow or mtfCurrentPrimaryStartTimeRaw != mtfCurrentPrimaryStartTime or mtfCurrentPrimaryProvisionalEndTimeRaw != mtfCurrentPrimaryProvisionalEndTime or mtfCurrentPrimaryConfirmedEndTimeRaw != mtfCurrentPrimaryConfirmedEndTime or mtfCurrentPrimaryDirRaw != mtfCurrentPrimaryDir or math.abs(mtfCurrentPrimaryRangeRaw - mtfCurrentPrimaryRange) > syminfo.mintick)
+int rawCurrentPrimarySortTime = currentPrimaryStructurallyValid ? mtfCurrentPrimaryConfirmedEndTimeRaw : na
+int trackedCurrentPrimarySortTime = trackedCurrentPrimaryExistsNow ? mtfCurrentPrimaryConfirmedEndTime : na
+bool currentPrimaryLaterThanTracked = currentPrimaryStructurallyValid and (not trackedCurrentPrimaryExistsNow or (not na(rawCurrentPrimarySortTime) and not na(trackedCurrentPrimarySortTime) and rawCurrentPrimarySortTime > trackedCurrentPrimarySortTime) or (not na(rawCurrentPrimarySortTime) and not na(trackedCurrentPrimarySortTime) and rawCurrentPrimarySortTime == trackedCurrentPrimarySortTime and mtfCurrentPrimaryProvisionalEndTimeRaw > mtfCurrentPrimaryProvisionalEndTime) or (not na(rawCurrentPrimarySortTime) and not na(trackedCurrentPrimarySortTime) and rawCurrentPrimarySortTime == trackedCurrentPrimarySortTime and mtfCurrentPrimaryProvisionalEndTimeRaw == mtfCurrentPrimaryProvisionalEndTime and mtfCurrentPrimaryStartTimeRaw > mtfCurrentPrimaryStartTime))
+float trackedCurrentPrimaryRange = trackedCurrentPrimaryExistsNow ? mtfCurrentPrimaryRange : na
+float trackedCurrentPrimaryDirectionalTerminal = trackedCurrentPrimaryExistsNow ? mtfCurrentPrimaryDir == 1 ? mtfCurrentPrimaryHigh : mtfCurrentPrimaryLow : na
+bool currentPrimaryMinRangeOk = not trackedCurrentPrimaryExistsNow or (not na(trackedCurrentPrimaryRange) and mtfCurrentPrimaryRangeRaw >= trackedCurrentPrimaryRange * minRelativeRangeFrac)
+bool currentPrimaryTerminalExpansionOk = not trackedCurrentPrimaryExistsNow or (not na(trackedCurrentPrimaryRange) and not na(trackedCurrentPrimaryDirectionalTerminal) and (mtfCurrentPrimaryDirRaw == 1 ? mtfCurrentPrimaryHighRaw > trackedCurrentPrimaryDirectionalTerminal + trackedCurrentPrimaryRange * dominanceRangeFrac : mtfCurrentPrimaryLowRaw < trackedCurrentPrimaryDirectionalTerminal - trackedCurrentPrimaryRange * dominanceRangeFrac))
+bool currentPrimaryRangeDominanceOk = not trackedCurrentPrimaryExistsNow or (not na(trackedCurrentPrimaryRange) and mtfCurrentPrimaryRangeRaw >= trackedCurrentPrimaryRange * (1 + dominanceRangeFrac))
+bool currentPrimaryFullyInsideTracked = trackedCurrentPrimaryExistsNow and mtfCurrentPrimaryLowRaw >= mtfCurrentPrimaryLow - syminfo.mintick and mtfCurrentPrimaryHighRaw <= mtfCurrentPrimaryHigh + syminfo.mintick
+bool currentPrimaryIsInternalMicroLeg = trackedCurrentPrimaryExistsNow and currentPrimaryFullyInsideTracked and not currentPrimaryRangeDominanceOk
+bool currentPrimaryDominatesTrackedOwner = not trackedCurrentPrimaryExistsNow or (currentPrimaryLaterThanTracked and currentPrimaryMinRangeOk and not currentPrimaryIsInternalMicroLeg and (not currentPrimaryTrackedOwnerExists or currentPrimaryTerminalExpansionOk or currentPrimaryRangeDominanceOk))
+bool currentPrimaryTakeoverAllowed = previousPrimaryAnchorExistsNow and currentPrimaryStructurallyValid and currentPrimaryCorrectionValid and rawCurrentPrimaryDistinctFromTracked and currentPrimaryDominatesTrackedOwner and not currentPrimaryIsInternalMicroLeg
+bool currentPrimaryNeedsRefresh = currentPrimaryTakeoverAllowed
+bool previousAnchorExistsFinal = previousPrimaryAnchorExistsNow
+bool previousAnchorBrokenByClose = previousAnchorExistsFinal and ((mtfPreviousPrimaryDirRaw == 1 and close < mtfPreviousPrimaryLowRaw - syminfo.mintick) or (mtfPreviousPrimaryDirRaw == -1 and close > mtfPreviousPrimaryHighRaw + syminfo.mintick))
+bool previousAnchorOutOfRangeByPrice = previousAnchorExistsFinal and (high > mtfPreviousPrimaryHighRaw + syminfo.mintick or low < mtfPreviousPrimaryLowRaw - syminfo.mintick)
+bool rawCurrentAbovePreviousAnchor = previousAnchorExistsFinal and currentPrimaryRawExistsNow and mtfCurrentPrimaryHighRaw > mtfPreviousPrimaryHighRaw + syminfo.mintick
+bool rawCurrentBelowPreviousAnchor = previousAnchorExistsFinal and currentPrimaryRawExistsNow and mtfCurrentPrimaryLowRaw < mtfPreviousPrimaryLowRaw - syminfo.mintick
+bool rawCurrentOutOfPreviousAnchor = rawCurrentAbovePreviousAnchor or rawCurrentBelowPreviousAnchor
+bool rawCurrentOutOfAnchorExpansion = previousAnchorExistsFinal and currentPrimaryRawExistsNow and ((mtfPreviousPrimaryDirRaw == 1 and rawCurrentBelowPreviousAnchor) or (mtfPreviousPrimaryDirRaw == -1 and rawCurrentAbovePreviousAnchor))
+bool previousAnchorStaleByExpansion = rawCurrentOutOfAnchorExpansion
+bool previousAnchorActiveValid = previousAnchorExistsFinal and not previousAnchorBrokenByClose and not previousAnchorStaleByExpansion
+bool previousOwnerFallbackAllowed = previousAnchorActiveValid and not mtfRollbackToPreviousAnchor
+string currentTakeoverRejectReason = currentPrimaryTakeoverAllowed ? "TAKEOVER_ALLOWED" : previousAnchorBrokenByClose ? "PREVIOUS_BROKEN" : rawCurrentOutOfAnchorExpansion ? "OUT_OF_ANCHOR_EXPANSION" : not previousAnchorExistsFinal ? "NO_ANCHOR" : not previousAnchorActiveValid and not currentPrimaryRawExistsNow ? "WAIT_NEW_ANCHOR" : not currentPrimaryRawExistsNow ? "RAW_INVALID" : not currentPrimaryNestedInAnchor ? "NOT_NESTED" : not currentPrimaryDistinctFromAnchor ? "SAME_AS_ANCHOR" : trackedCurrentPrimaryExistsNow and not rawCurrentPrimaryDistinctFromTracked ? "SAME_AS_TRACKED" : trackedCurrentPrimaryExistsNow and not currentPrimaryLaterThanTracked ? "NOT_LATER" : not currentPrimaryMinRangeOk ? "RANGE_TOO_SMALL" : currentPrimaryIsInternalMicroLeg ? "INTERNAL_MICRO_LEG" : not currentPrimaryCorrectionValid ? "CORRECTION_INVALID" : not currentPrimaryDominatesTrackedOwner ? "NO_DOMINANCE" : "UNKNOWN"
+
+bool mtfAnchorChanged = previousPrimaryAnchorExistsNow and (mtfTrackedAnchorStartTime != mtfPreviousPrimaryStartTimeRaw or mtfTrackedAnchorConfirmedEndTime != mtfPreviousPrimaryConfirmedEndTimeRaw or mtfTrackedAnchorDir != mtfPreviousPrimaryDirRaw)
+if mtfAnchorChanged or not previousPrimaryAnchorExistsNow
+    mtfCurrentPrimaryExists := false
+    mtfCurrentPrimaryStartTime := na
+    mtfCurrentPrimaryProvisionalEndTime := na
+    mtfCurrentPrimaryConfirmedEndTime := na
+    mtfCurrentPrimaryLow := na
+    mtfCurrentPrimaryHigh := na
+    mtfCurrentPrimaryDir := 0
+    mtfCurrentPrimaryRange := na
+    mtfCurrentPrimaryCompletionTime := na
+    mtfCurrentPrimaryCompletionPrice := na
+    mtfCurrentPrimaryActive := false
+    mtfCurrentPrimaryBroken := false
+    mtfRollbackToPreviousAnchor := false
+    mtfLastPrimaryBreakTime := na
+    if not na(finalPrimaryBreakLine)
+        line.delete(finalPrimaryBreakLine)
+        finalPrimaryBreakLine := na
+    if not na(finalLblPrimaryBreak)
+        label.delete(finalLblPrimaryBreak)
+        finalLblPrimaryBreak := na
+
+if previousPrimaryAnchorExistsNow
+    mtfTrackedAnchorStartTime := mtfPreviousPrimaryStartTimeRaw
+    mtfTrackedAnchorConfirmedEndTime := mtfPreviousPrimaryConfirmedEndTimeRaw
+    mtfTrackedAnchorDir := mtfPreviousPrimaryDirRaw
+
+if currentPrimaryNeedsRefresh
+    if not na(finalPrimaryBreakLine)
+        line.delete(finalPrimaryBreakLine)
+        finalPrimaryBreakLine := na
+    if not na(finalLblPrimaryBreak)
+        label.delete(finalLblPrimaryBreak)
+        finalLblPrimaryBreak := na
+    mtfLastPrimaryBreakTime := na
+    mtfCurrentPrimaryExists := true
+    mtfCurrentPrimaryStartTime := mtfCurrentPrimaryStartTimeRaw
+    mtfCurrentPrimaryProvisionalEndTime := mtfCurrentPrimaryProvisionalEndTimeRaw
+    mtfCurrentPrimaryConfirmedEndTime := mtfCurrentPrimaryConfirmedEndTimeRaw
+    mtfCurrentPrimaryLow := mtfCurrentPrimaryLowRaw
+    mtfCurrentPrimaryHigh := mtfCurrentPrimaryHighRaw
+    mtfCurrentPrimaryDir := mtfCurrentPrimaryDirRaw
+    mtfCurrentPrimaryRange := mtfCurrentPrimaryRangeRaw
+    mtfCurrentPrimaryCompletionTime := mtfCurrentPrimaryCompletionTimeRaw
+    mtfCurrentPrimaryCompletionPrice := mtfCurrentPrimaryCompletionPriceRaw
+    mtfCurrentPrimaryActive := true
+    mtfCurrentPrimaryBroken := false
+    mtfRollbackToPreviousAnchor := false
+
+int confirmTimeframeSeconds = timeframe.in_seconds(confirmTimeframe)
+bool confirmUsesLowerTf = chartTimeframeSeconds > confirmTimeframeSeconds
+array<float> confirmLowArray = array.new_float()
+array<float> confirmHighArray = array.new_float()
+array<int> confirmTimeArray = array.new_int()
+if confirmUsesLowerTf
+    confirmLowArray := request.security_lower_tf(syminfo.tickerid, confirmTimeframe, low)
+    confirmHighArray := request.security_lower_tf(syminfo.tickerid, confirmTimeframe, high)
+    confirmTimeArray := request.security_lower_tf(syminfo.tickerid, confirmTimeframe, time)
+else
+    array.push(confirmLowArray, low)
+    array.push(confirmHighArray, high)
+    array.push(confirmTimeArray, time)
+
+[confirmLatestSwingLowPrice, confirmLatestSwingLowTime, confirmLatestSwingHighPrice, confirmLatestSwingHighTime] = request.security(syminfo.tickerid, confirmTimeframe, [ta.valuewhen(low[1] < low[2] and low[1] < low, low[1], 0), ta.valuewhen(low[1] < low[2] and low[1] < low, time[1], 0), ta.valuewhen(high[1] > high[2] and high[1] > high, high[1], 0), ta.valuewhen(high[1] > high[2] and high[1] > high, time[1], 0)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+float mtfCurrentPrimaryProtectedLevel = na
+int mtfCurrentPrimaryProtectedTime = na
+bool mtfCurrentPrimaryProtectedValid = false
+string mtfCurrentPrimaryProtectedSource = "NONE"
+string mtfCurrentPrimaryProtectedMode = "15M_INTERNAL_SWING_DEBUG"
+string mtfCurrentPrimaryProtectedMissingReason = "NO_CURRENT_PRIMARY"
+
+bool protectedDebugCurrentContextReady = mtfCurrentPrimaryExists and not na(mtfCurrentPrimaryStartTime) and not na(mtfCurrentPrimaryConfirmedEndTime) and mtfCurrentPrimaryDir != 0
+bool protectedBullSwingPresent = not na(confirmLatestSwingLowPrice) and not na(confirmLatestSwingLowTime)
+bool protectedBearSwingPresent = not na(confirmLatestSwingHighPrice) and not na(confirmLatestSwingHighTime)
+bool bullProtectedTimeValid = protectedDebugCurrentContextReady and mtfCurrentPrimaryDir == 1 and protectedBullSwingPresent and confirmLatestSwingLowTime >= mtfCurrentPrimaryStartTime and confirmLatestSwingLowTime >= mtfCurrentPrimaryConfirmedEndTime
+bool bearProtectedTimeValid = protectedDebugCurrentContextReady and mtfCurrentPrimaryDir == -1 and protectedBearSwingPresent and confirmLatestSwingHighTime >= mtfCurrentPrimaryStartTime and confirmLatestSwingHighTime >= mtfCurrentPrimaryConfirmedEndTime
+bool bullProtectedLevelCandidateValid = bullProtectedTimeValid and confirmLatestSwingLowPrice >= mtfCurrentPrimaryLow - syminfo.mintick and confirmLatestSwingLowPrice <= mtfCurrentPrimaryHigh + syminfo.mintick
+bool bearProtectedLevelCandidateValid = bearProtectedTimeValid and confirmLatestSwingHighPrice >= mtfCurrentPrimaryLow - syminfo.mintick and confirmLatestSwingHighPrice <= mtfCurrentPrimaryHigh + syminfo.mintick
+bool protectedDebugContextChanged = protectedDebugCurrentContextReady and (mtfCurrentPrimaryStartTime != protectedDebugTrackedPrimaryStartTime or mtfCurrentPrimaryConfirmedEndTime != protectedDebugTrackedPrimaryConfirmedEndTime or mtfCurrentPrimaryDir != protectedDebugTrackedPrimaryDir)
+
+if not protectedDebugCurrentContextReady
+    protectedDebugTrackedPrimaryStartTime := na
+    protectedDebugTrackedPrimaryConfirmedEndTime := na
+    protectedDebugTrackedPrimaryDir := 0
+    protectedDebugHeldLevel := na
+    protectedDebugHeldTime := na
+    protectedDebugHeldValid := false
+    protectedDebugHeldSource := "NONE"
+else if protectedDebugContextChanged
+    protectedDebugTrackedPrimaryStartTime := mtfCurrentPrimaryStartTime
+    protectedDebugTrackedPrimaryConfirmedEndTime := mtfCurrentPrimaryConfirmedEndTime
+    protectedDebugTrackedPrimaryDir := mtfCurrentPrimaryDir
+    protectedDebugHeldLevel := na
+    protectedDebugHeldTime := na
+    protectedDebugHeldValid := false
+    protectedDebugHeldSource := "NONE"
+
+if not mtfCurrentPrimaryExists
+    mtfCurrentPrimaryProtectedMissingReason := "NO_CURRENT_PRIMARY"
+else if not protectedDebugCurrentContextReady
+    mtfCurrentPrimaryProtectedMissingReason := "PRIMARY_CONTEXT_INCOMPLETE"
+else if mtfCurrentPrimaryDir == 1 and not protectedBullSwingPresent
+    mtfCurrentPrimaryProtectedMissingReason := "NO_15M_SWING_LOW"
+else if mtfCurrentPrimaryDir == -1 and not protectedBearSwingPresent
+    mtfCurrentPrimaryProtectedMissingReason := "NO_15M_SWING_HIGH"
+else if (mtfCurrentPrimaryDir == 1 and protectedBullSwingPresent and not bullProtectedTimeValid) or (mtfCurrentPrimaryDir == -1 and protectedBearSwingPresent and not bearProtectedTimeValid)
+    mtfCurrentPrimaryProtectedMissingReason := "SWING_BEFORE_PRIMARY_LOCK"
+else if (mtfCurrentPrimaryDir == 1 and protectedBullSwingPresent and bullProtectedTimeValid and not bullProtectedLevelCandidateValid) or (mtfCurrentPrimaryDir == -1 and protectedBearSwingPresent and bearProtectedTimeValid and not bearProtectedLevelCandidateValid)
+    mtfCurrentPrimaryProtectedMissingReason := "SWING_OUTSIDE_PRIMARY_RANGE"
+else
+    mtfCurrentPrimaryProtectedMissingReason := "NONE"
+
+if bullProtectedLevelCandidateValid
+    mtfCurrentPrimaryProtectedLevel := confirmLatestSwingLowPrice
+    mtfCurrentPrimaryProtectedTime := confirmLatestSwingLowTime
+    mtfCurrentPrimaryProtectedValid := true
+    mtfCurrentPrimaryProtectedSource := "15M_SWING_LOW_IN_1H_PRIMARY"
+else if bearProtectedLevelCandidateValid
+    mtfCurrentPrimaryProtectedLevel := confirmLatestSwingHighPrice
+    mtfCurrentPrimaryProtectedTime := confirmLatestSwingHighTime
+    mtfCurrentPrimaryProtectedValid := true
+    mtfCurrentPrimaryProtectedSource := "15M_SWING_HIGH_IN_1H_PRIMARY"
+else if protectedDebugCurrentContextReady
+    mtfCurrentPrimaryProtectedSource := "NO_PROTECTED_SWING"
+
+if mtfCurrentPrimaryProtectedValid
+    protectedDebugHeldLevel := mtfCurrentPrimaryProtectedLevel
+    protectedDebugHeldTime := mtfCurrentPrimaryProtectedTime
+    protectedDebugHeldValid := true
+    protectedDebugHeldSource := mtfCurrentPrimaryProtectedSource
+else if protectedDebugCurrentContextReady and protectedDebugHeldValid and not na(protectedDebugHeldLevel) and not na(protectedDebugHeldTime)
+    mtfCurrentPrimaryProtectedLevel := protectedDebugHeldLevel
+    mtfCurrentPrimaryProtectedTime := protectedDebugHeldTime
+    mtfCurrentPrimaryProtectedValid := true
+    mtfCurrentPrimaryProtectedSource := protectedDebugHeldSource
+
+float mtfCurrentPrimaryBreakLevel = na
+string mtfCurrentPrimaryBreakMode = "NO_BREAK_LEVEL"
+bool mtfCurrentPrimaryBreakByWick = false
+bool mtfCurrentPrimaryBreakByClose = false
+if mtfCurrentPrimaryExists and not na(mtfCurrentPrimaryRange) and mtfCurrentPrimaryRange > syminfo.mintick and mtfCurrentPrimaryDir != 0
+    mtfCurrentPrimaryBreakLevel := mtfCurrentPrimaryDir == 1 ? mtfCurrentPrimaryHigh - mtfCurrentPrimaryRange * 0.79 : mtfCurrentPrimaryLow + mtfCurrentPrimaryRange * 0.79
+    mtfCurrentPrimaryBreakMode := "CURRENT_PRIMARY_FIB79_15M_WICK"
+
+bool lastActualCurrentBreakNow = false
+int lastActualCurrentBreakTimeCandidate = na
+float lastActualCurrentBreakPriceCandidate = na
+
+if mtfCurrentPrimaryExists and mtfCurrentPrimaryActive and previousPrimaryAnchorExistsNow and not mtfRollbackToPreviousAnchor and not na(mtfCurrentPrimaryConfirmedEndTime)
+    int confirmBarCount = array.size(confirmTimeArray)
+    if confirmBarCount > 0
+        for idx = 0 to confirmBarCount - 1
+            int confirmBarTime = array.get(confirmTimeArray, idx)
+            float confirmBarLow = array.get(confirmLowArray, idx)
+            float confirmBarHigh = array.get(confirmHighArray, idx)
+            bool confirmAfterCurrent = confirmBarTime >= mtfCurrentPrimaryConfirmedEndTime
+            bool bullBreakNow = mtfCurrentPrimaryDir == 1 and confirmAfterCurrent and not na(mtfCurrentPrimaryBreakLevel) and confirmBarLow < mtfCurrentPrimaryBreakLevel
+            bool bearBreakNow = mtfCurrentPrimaryDir == -1 and confirmAfterCurrent and not na(mtfCurrentPrimaryBreakLevel) and confirmBarHigh > mtfCurrentPrimaryBreakLevel
+            if bullBreakNow or bearBreakNow
+                lastActualCurrentBreakNow := true
+                mtfCurrentPrimaryBreakByWick := true
+                lastActualCurrentBreakTimeCandidate := confirmBarTime
+                lastActualCurrentBreakPriceCandidate := mtfCurrentPrimaryBreakLevel
+
+if lastActualCurrentBreakNow
+    mtfCurrentPrimaryActive := false
+    mtfCurrentPrimaryBroken := true
+    mtfRollbackToPreviousAnchor := previousPrimaryAnchorExistsNow
+    mtfLastPrimaryBreakTime := lastActualCurrentBreakTimeCandidate
+
+    if not na(finalPrimaryBreakLine)
+        line.delete(finalPrimaryBreakLine)
+        finalPrimaryBreakLine := na
+    if not na(finalLblPrimaryBreak)
+        label.delete(finalLblPrimaryBreak)
+        finalLblPrimaryBreak := na
+
+    finalPrimaryBreakLine := line.new(mtfCurrentPrimaryStartTime, lastActualCurrentBreakPriceCandidate, lastActualCurrentBreakTimeCandidate, lastActualCurrentBreakPriceCandidate, xloc=xloc.bar_time, extend=extend.none, color=color.red, width=2)
+    finalLblPrimaryBreak := label.new(lastActualCurrentBreakTimeCandidate, lastActualCurrentBreakPriceCandidate, roleConfirmProof + " ПОДТВ. СЛОМ", xloc=xloc.bar_time, style=mtfCurrentPrimaryDir == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.red, VIS_TRANS_STATE_LABEL), textcolor=color.white)
+
+bool previousAnchorVisualAllowed = previousPrimaryAnchorExistsNow
+bool currentPrimaryVisualAllowed = mtfCurrentPrimaryExists
+bool currentPrimaryIsBrokenVisual = mtfCurrentPrimaryExists and mtfCurrentPrimaryBroken
+bool currentPrimaryIsActiveVisual = mtfCurrentPrimaryExists and mtfCurrentPrimaryActive and not mtfCurrentPrimaryBroken
+bool activeOwnerIsCurrent = mtfCurrentPrimaryExists and mtfCurrentPrimaryActive and not mtfCurrentPrimaryBroken and not mtfRollbackToPreviousAnchor
+bool activeOwnerIsPreviousAfterRollback = previousAnchorActiveValid and mtfRollbackToPreviousAnchor
+bool activeOwnerIsPreviousFallback = previousOwnerFallbackAllowed and not activeOwnerIsCurrent
+bool activeOwnerIsPreviousAnchor = activeOwnerIsPreviousAfterRollback or activeOwnerIsPreviousFallback
+bool activeOwnerExistsFinal = activeOwnerIsCurrent or activeOwnerIsPreviousAnchor
+string activeOwnerStateFinal = activeOwnerIsCurrent ? "CURRENT" : activeOwnerIsPreviousAfterRollback ? "PREVIOUS_AFTER_ROLLBACK" : activeOwnerIsPreviousAnchor ? "PREVIOUS" : "NONE"
+string fibOwnerStateFinal = activeOwnerIsCurrent ? "CURRENT" : activeOwnerIsPreviousAnchor ? "PREVIOUS" : "NONE"
+string currentLockStateFinal = currentPrimaryIsActiveVisual ? "LOCKED" : currentPrimaryIsBrokenVisual ? "BROKEN" : currentPrimaryVisualAllowed ? "INACTIVE" : "NONE"
+string previousAnchorStateFinal = not previousAnchorExistsFinal ? "NONE" : previousAnchorBrokenByClose ? "BROKEN" : previousAnchorStaleByExpansion ? "STALE" : activeOwnerIsPreviousAnchor ? "ACTIVE" : "REFERENCE"
+bool rearmWaitNewPoi = false
+bool rearmWaitPrimary = false
+bool rearmLockedCurrent = false
+string rearmStateFinal = "REARM_NONE_OFF"
+string rearmReasonFinal = "NO_REARM_NEEDED"
+string breakStateFinal = mtfCurrentPrimaryBroken and not activeOwnerExistsFinal ? "BROKEN_PRIMARY_OWNER_NONE" : mtfCurrentPrimaryBroken and mtfRollbackToPreviousAnchor ? "BROKEN_PRIMARY_ROLLBACK_TO_POI" : mtfCurrentPrimaryBroken ? "BROKEN_PRIMARY" : "NO_BREAK"
+
+if activeOwnerIsCurrent
+    rearmStateFinal := "REARM_LOCKED_CURRENT"
+    rearmReasonFinal := "1H_PRIMARY_OWNER_ACTIVE"
+    rearmLockedCurrent := true
+else if not activeOwnerExistsFinal and not previousAnchorActiveValid
+    rearmStateFinal := "WAIT_NEW_POI"
+    rearmReasonFinal := mtfCurrentPrimaryBroken ? "PRIMARY_BROKEN_POI_INVALID" : "NO_VALID_4H_POI"
+    rearmWaitNewPoi := true
+else if not activeOwnerExistsFinal and previousAnchorActiveValid
+    rearmStateFinal := "WAIT_PRIMARY_IN_POI"
+    rearmReasonFinal := "VALID_4H_POI_WAIT_1H_PRIMARY"
+    rearmWaitPrimary := true
+else if activeOwnerIsPreviousAnchor or activeOwnerIsPreviousAfterRollback
+    rearmStateFinal := "WAIT_PRIMARY_IN_POI"
+    rearmReasonFinal := mtfCurrentPrimaryBroken ? "PRIMARY_BROKEN_ROLLBACK_TO_POI" : "4H_POI_OWNER_WAIT_1H_PRIMARY"
+    rearmWaitPrimary := true
+
+string activeOwnerStateDisplayRu = f_ruOwnerState(activeOwnerStateFinal)
+string fibOwnerStateDisplayRu = f_ruOwnerState(fibOwnerStateFinal)
+string currentLockStateDisplayRu = f_ruLockState(currentLockStateFinal)
+string previousAnchorStateDisplayRu = f_ruPoiState(previousAnchorStateFinal)
+string currentTakeoverRejectDisplayRu = f_ruNextConfirm(currentTakeoverRejectReason)
+string rearmStateDisplayRu = f_ruRearmState(rearmStateFinal)
+string rearmReasonDisplayRu = f_ruRearmReason(rearmReasonFinal)
+string breakStateDisplayRu = f_ruBreakState(breakStateFinal)
+string breakModeDisplayRu = f_ruBreakMode(mtfCurrentPrimaryBreakMode)
+
+if not previousAnchorVisualAllowed
+    if not na(previousAnchorBaseLine)
+        line.delete(previousAnchorBaseLine)
+        previousAnchorBaseLine := na
+    if not na(previousAnchorTerminalLine)
+        line.delete(previousAnchorTerminalLine)
+        previousAnchorTerminalLine := na
+    if not na(lblPreviousAnchorBase)
+        label.delete(lblPreviousAnchorBase)
+        lblPreviousAnchorBase := na
+    if not na(lblPreviousAnchorTerminal)
+        label.delete(lblPreviousAnchorTerminal)
+        lblPreviousAnchorTerminal := na
+else if mtfAnchorChanged or na(previousAnchorBaseLine) or na(previousAnchorTerminalLine) or na(lblPreviousAnchorBase) or na(lblPreviousAnchorTerminal)
+    float previousAnchorBasePrice = mtfPreviousPrimaryDirRaw == 1 ? mtfPreviousPrimaryLowRaw : mtfPreviousPrimaryHighRaw
+    float previousAnchorTerminalPrice = mtfPreviousPrimaryDirRaw == 1 ? mtfPreviousPrimaryHighRaw : mtfPreviousPrimaryLowRaw
+    color previousAnchorLabelColor = color.new(color.gray, VIS_TRANS_STATE_LABEL)
+    if not na(previousAnchorBaseLine)
+        line.delete(previousAnchorBaseLine)
+        previousAnchorBaseLine := na
+    if not na(previousAnchorTerminalLine)
+        line.delete(previousAnchorTerminalLine)
+        previousAnchorTerminalLine := na
+    if not na(lblPreviousAnchorBase)
+        label.delete(lblPreviousAnchorBase)
+        lblPreviousAnchorBase := na
+    if not na(lblPreviousAnchorTerminal)
+        label.delete(lblPreviousAnchorTerminal)
+        lblPreviousAnchorTerminal := na
+    previousAnchorBaseLine := line.new(mtfPreviousPrimaryStartTimeRaw, previousAnchorBasePrice, time, previousAnchorBasePrice, xloc=xloc.bar_time, extend=extend.right, color=color.gray, style=line.style_dashed, width=1)
+    previousAnchorTerminalLine := line.new(mtfPreviousPrimaryProvisionalEndTimeRaw, previousAnchorTerminalPrice, time, previousAnchorTerminalPrice, xloc=xloc.bar_time, extend=extend.right, color=color.gray, style=line.style_dashed, width=1)
+    lblPreviousAnchorBase := label.new(mtfPreviousPrimaryStartTimeRaw, previousAnchorBasePrice, rolePoiProof + " POI БАЗА", xloc=xloc.bar_time, style=mtfPreviousPrimaryDirRaw == 1 ? label.style_label_up : label.style_label_down, color=previousAnchorLabelColor, textcolor=color.white)
+    lblPreviousAnchorTerminal := label.new(mtfPreviousPrimaryProvisionalEndTimeRaw, previousAnchorTerminalPrice, rolePoiProof + " POI КОНЕЦ", xloc=xloc.bar_time, style=mtfPreviousPrimaryDirRaw == 1 ? label.style_label_down : label.style_label_up, color=previousAnchorLabelColor, textcolor=color.white)
+
+if not na(currentPrimaryBaseLine)
+    line.delete(currentPrimaryBaseLine)
+    currentPrimaryBaseLine := na
+if not na(currentPrimaryTerminalLine)
+    line.delete(currentPrimaryTerminalLine)
+    currentPrimaryTerminalLine := na
+if not na(lblCurrentPrimaryBase)
+    label.delete(lblCurrentPrimaryBase)
+    lblCurrentPrimaryBase := na
+if not na(lblCurrentPrimaryTerminal)
+    label.delete(lblCurrentPrimaryTerminal)
+    lblCurrentPrimaryTerminal := na
+if not na(lblCurrentPrimaryState)
+    label.delete(lblCurrentPrimaryState)
+    lblCurrentPrimaryState := na
+if not na(lblOwnerProof)
+    label.delete(lblOwnerProof)
+    lblOwnerProof := na
+if not na(finalProtectedLevelLine)
+    line.delete(finalProtectedLevelLine)
+    finalProtectedLevelLine := na
+if not na(finalLblProtectedLevel)
+    label.delete(finalLblProtectedLevel)
+    finalLblProtectedLevel := na
+if not na(finalTemp079Line)
+    line.delete(finalTemp079Line)
+    finalTemp079Line := na
+if not na(finalLblTemp079)
+    label.delete(finalLblTemp079)
+    finalLblTemp079 := na
+
+if currentPrimaryVisualAllowed
+    float currentPrimaryBasePrice = mtfCurrentPrimaryDir == 1 ? mtfCurrentPrimaryLow : mtfCurrentPrimaryHigh
+    float currentPrimaryTerminalPrice = mtfCurrentPrimaryDir == 1 ? mtfCurrentPrimaryHigh : mtfCurrentPrimaryLow
+    float currentPrimaryConfirmPrice = mtfCurrentPrimaryDir == 1 ? mtfCurrentPrimaryHigh - mtfCurrentPrimaryRange * 0.5 : mtfCurrentPrimaryLow + mtfCurrentPrimaryRange * 0.5
+    color currentBaseLineColor = currentPrimaryIsBrokenVisual ? color.new(color.blue, 65) : color.blue
+    color currentTerminalLineColor = currentPrimaryIsBrokenVisual ? color.new(color.orange, 65) : color.orange
+    color currentBaseLabelColor = color.new(color.blue, VIS_TRANS_STATE_LABEL)
+    color currentTerminalLabelColor = color.new(color.orange, VIS_TRANS_STATE_LABEL)
+    color currentStateColor = currentPrimaryIsBrokenVisual ? color.red : currentPrimaryIsActiveVisual ? color.green : color.gray
+    color currentStateLabelColor = color.new(currentStateColor, VIS_TRANS_STATE_LABEL)
+    string currentStateLabelText = currentPrimaryIsBrokenVisual ? "СЛОМ " + rolePrimaryProof + " ОСН." : currentPrimaryIsActiveVisual ? rolePrimaryProof + " ОСН. АКТИВ" : rolePrimaryProof + " ОСН. НЕАКТИВЕН"
+    currentPrimaryBaseLine := line.new(mtfCurrentPrimaryStartTime, currentPrimaryBasePrice, time, currentPrimaryBasePrice, xloc=xloc.bar_time, extend=extend.right, color=currentBaseLineColor, width=1)
+    currentPrimaryTerminalLine := line.new(mtfCurrentPrimaryProvisionalEndTime, currentPrimaryTerminalPrice, time, currentPrimaryTerminalPrice, xloc=xloc.bar_time, extend=extend.right, color=currentTerminalLineColor, width=1)
+    lblCurrentPrimaryBase := label.new(mtfCurrentPrimaryStartTime, currentPrimaryBasePrice, rolePrimaryProof + " ОСН. БАЗА", xloc=xloc.bar_time, style=mtfCurrentPrimaryDir == 1 ? label.style_label_up : label.style_label_down, color=currentBaseLabelColor, textcolor=color.white)
+    lblCurrentPrimaryTerminal := label.new(mtfCurrentPrimaryProvisionalEndTime, currentPrimaryTerminalPrice, rolePrimaryProof + " ОСН. КОНЕЦ", xloc=xloc.bar_time, style=mtfCurrentPrimaryDir == 1 ? label.style_label_down : label.style_label_up, color=currentTerminalLabelColor, textcolor=color.white)
+    lblCurrentPrimaryState := label.new(mtfCurrentPrimaryConfirmedEndTime, currentPrimaryConfirmPrice, currentStateLabelText, xloc=xloc.bar_time, style=label.style_label_left, color=currentStateLabelColor, textcolor=color.white)
+
+if protectedLevelDebugEnabled and mtfCurrentPrimaryProtectedValid and not na(mtfCurrentPrimaryProtectedLevel) and not na(mtfCurrentPrimaryProtectedTime)
+    color protectedLevelDebugColor = color.new(color.aqua, 20)
+    color protectedLevelLabelColor = color.new(color.aqua, 55)
+    finalProtectedLevelLine := line.new(mtfCurrentPrimaryProtectedTime, mtfCurrentPrimaryProtectedLevel, time, mtfCurrentPrimaryProtectedLevel, xloc=xloc.bar_time, extend=extend.right, color=protectedLevelDebugColor, style=line.style_dashed, width=1)
+    finalLblProtectedLevel := label.new(mtfCurrentPrimaryProtectedTime, mtfCurrentPrimaryProtectedLevel, "ЗАЩ. УРОВЕНЬ 1H", xloc=xloc.bar_time, style=mtfCurrentPrimaryDir == 1 ? label.style_label_up : label.style_label_down, color=protectedLevelLabelColor, textcolor=color.white)
+
+if protectedLevelDebugEnabled and protectedLevelShow079Compare and currentPrimaryVisualAllowed and not na(mtfCurrentPrimaryBreakLevel)
+    color temp079DebugColor = color.new(color.yellow, 78)
+    color temp079LabelColor = color.new(color.yellow, 86)
+    int temp079LineStartTime = not na(mtfCurrentPrimaryConfirmedEndTime) ? mtfCurrentPrimaryConfirmedEndTime : mtfCurrentPrimaryStartTime
+    finalTemp079Line := line.new(temp079LineStartTime, mtfCurrentPrimaryBreakLevel, time, mtfCurrentPrimaryBreakLevel, xloc=xloc.bar_time, extend=extend.right, color=temp079DebugColor, style=line.style_dotted, width=1)
+    finalLblTemp079 := label.new(temp079LineStartTime, mtfCurrentPrimaryBreakLevel, "ВРЕМ. 0.79", xloc=xloc.bar_time, style=mtfCurrentPrimaryDir == 1 ? label.style_label_up : label.style_label_down, color=temp079LabelColor, textcolor=color.white)
+
+if not na(finalFibLine0)
+    line.delete(finalFibLine0)
+    finalFibLine0 := na
+if not na(finalFibLine50)
+    line.delete(finalFibLine50)
+    finalFibLine50 := na
+if not na(finalFibLine705)
+    line.delete(finalFibLine705)
+    finalFibLine705 := na
+if not na(finalFibLine79)
+    line.delete(finalFibLine79)
+    finalFibLine79 := na
+if not na(finalFibLine1)
+    line.delete(finalFibLine1)
+    finalFibLine1 := na
+
+int activeOwnerStartTime = na
+int activeOwnerConfirmedEndTime = na
+float activeOwnerLow = na
+float activeOwnerHigh = na
+int activeOwnerDir = 0
+float activeOwnerRange = na
+
+if activeOwnerStateFinal == "CURRENT"
+    activeOwnerStartTime := mtfCurrentPrimaryStartTime
+    activeOwnerConfirmedEndTime := mtfCurrentPrimaryConfirmedEndTime
+    activeOwnerLow := mtfCurrentPrimaryLow
+    activeOwnerHigh := mtfCurrentPrimaryHigh
+    activeOwnerDir := mtfCurrentPrimaryDir
+    activeOwnerRange := mtfCurrentPrimaryRange
+else if activeOwnerStateFinal == "PREVIOUS" or activeOwnerStateFinal == "PREVIOUS_AFTER_ROLLBACK"
+    activeOwnerStartTime := mtfPreviousPrimaryStartTimeRaw
+    activeOwnerConfirmedEndTime := mtfPreviousPrimaryConfirmedEndTimeRaw
+    activeOwnerLow := mtfPreviousPrimaryLowRaw
+    activeOwnerHigh := mtfPreviousPrimaryHighRaw
+    activeOwnerDir := mtfPreviousPrimaryDirRaw
+    activeOwnerRange := mtfPreviousPrimaryRangeRaw
+
+bool fibVisualOwnerActive = activeOwnerExistsFinal and not na(activeOwnerStartTime) and not na(activeOwnerConfirmedEndTime) and not na(activeOwnerLow) and not na(activeOwnerHigh) and activeOwnerDir != 0 and not na(activeOwnerRange) and activeOwnerRange > syminfo.mintick
+float currentFibVisualBasePrice = fibVisualOwnerActive ? (activeOwnerDir == 1 ? activeOwnerLow : activeOwnerHigh) : na
+float currentFibVisualTerminalPrice = fibVisualOwnerActive ? (activeOwnerDir == 1 ? activeOwnerHigh : activeOwnerLow) : na
+
+if fibVisualOwnerActive and not na(currentFibVisualBasePrice) and not na(currentFibVisualTerminalPrice)
+    finalFibVisualMemoryValid := true
+    finalFibVisualMemorySource := activeOwnerStateFinal
+    finalFibVisualMemoryBasePrice := currentFibVisualBasePrice
+    finalFibVisualMemoryTerminalPrice := currentFibVisualTerminalPrice
+    finalFibVisualMemoryBaseTime := activeOwnerStartTime
+    finalFibVisualMemoryTerminalTime := activeOwnerConfirmedEndTime
+
+bool fibVisualMemoryActive = not fibVisualOwnerActive and finalFibVisualMemoryValid and not na(finalFibVisualMemoryBasePrice) and not na(finalFibVisualMemoryTerminalPrice) and not na(finalFibVisualMemoryBaseTime) and not na(finalFibVisualMemoryTerminalTime) and math.abs(finalFibVisualMemoryTerminalPrice - finalFibVisualMemoryBasePrice) > syminfo.mintick
+bool fibVisualActive = fibVisualOwnerActive or fibVisualMemoryActive
+string fibVisualSourceFinal = fibVisualOwnerActive ? fibOwnerStateFinal : fibVisualMemoryActive ? "LAST_VALID_BROKEN_CONTEXT" : "NONE"
+string fibVisualStateDisplayRu = fibVisualOwnerActive ? "АКТИВНЫЙ" : fibVisualMemoryActive ? "ПОСЛ. ВАЛИДНЫЙ" : "НЕТ"
+int fibVisualBaseTime = fibVisualOwnerActive ? activeOwnerStartTime : fibVisualMemoryActive ? finalFibVisualMemoryBaseTime : na
+int fibVisualTerminalTime = fibVisualOwnerActive ? activeOwnerConfirmedEndTime : fibVisualMemoryActive ? finalFibVisualMemoryTerminalTime : na
+float fibVisualBasePrice = fibVisualOwnerActive ? currentFibVisualBasePrice : fibVisualMemoryActive ? finalFibVisualMemoryBasePrice : na
+float fibVisualTerminalPrice = fibVisualOwnerActive ? currentFibVisualTerminalPrice : fibVisualMemoryActive ? finalFibVisualMemoryTerminalPrice : na
+bool fibVisualBull = fibVisualActive and not na(fibVisualBasePrice) and not na(fibVisualTerminalPrice) and fibVisualTerminalPrice > fibVisualBasePrice
+float fibVisualRange = fibVisualActive and not na(fibVisualBasePrice) and not na(fibVisualTerminalPrice) ? math.abs(fibVisualTerminalPrice - fibVisualBasePrice) : na
+
+if fibVisualActive and not na(fibVisualBaseTime) and not na(fibVisualTerminalTime) and not na(fibVisualRange) and fibVisualRange > syminfo.mintick
+    float activeFib0 = na
+    float activeFib50 = na
+    float activeFib705 = na
+    float activeFib79 = na
+    float activeFib1 = na
+    color fibLine0Color = color.new(color.black, fibVisualMemoryActive ? 60 : 0)
+    color fibLine50Color = color.new(color.blue, fibVisualMemoryActive ? 60 : 0)
+    color fibLine705Color = color.new(color.red, fibVisualMemoryActive ? 60 : 0)
+    color fibLine79Color = color.new(color.red, fibVisualMemoryActive ? 75 : 0)
+    color fibLine1Color = color.new(color.black, fibVisualMemoryActive ? 60 : 0)
+    int fibLineWidth = fibVisualMemoryActive ? 1 : 2
+
+    if fibVisualBull
+        activeFib0 := fibVisualTerminalPrice
+        activeFib50 := fibVisualTerminalPrice - fibVisualRange * 0.5
+        activeFib705 := fibVisualTerminalPrice - fibVisualRange * 0.705
+        activeFib79 := fibVisualTerminalPrice - fibVisualRange * 0.79
+        activeFib1 := fibVisualBasePrice
+    else
+        activeFib0 := fibVisualTerminalPrice
+        activeFib50 := fibVisualTerminalPrice + fibVisualRange * 0.5
+        activeFib705 := fibVisualTerminalPrice + fibVisualRange * 0.705
+        activeFib79 := fibVisualTerminalPrice + fibVisualRange * 0.79
+        activeFib1 := fibVisualBasePrice
+
+    finalFibLine0 := line.new(fibVisualBaseTime, activeFib0, fibVisualTerminalTime, activeFib0, xloc=xloc.bar_time, extend=extend.right, color=fibLine0Color, width=fibLineWidth)
+    finalFibLine50 := line.new(fibVisualBaseTime, activeFib50, fibVisualTerminalTime, activeFib50, xloc=xloc.bar_time, extend=extend.right, color=fibLine50Color, width=fibLineWidth)
+    finalFibLine705 := line.new(fibVisualBaseTime, activeFib705, fibVisualTerminalTime, activeFib705, xloc=xloc.bar_time, extend=extend.right, color=fibLine705Color, width=fibLineWidth)
+    finalFibLine79 := line.new(fibVisualBaseTime, activeFib79, fibVisualTerminalTime, activeFib79, xloc=xloc.bar_time, extend=extend.right, color=fibLine79Color, width=fibLineWidth)
+    finalFibLine1 := line.new(fibVisualBaseTime, activeFib1, fibVisualTerminalTime, activeFib1, xloc=xloc.bar_time, extend=extend.right, color=fibLine1Color, width=fibLineWidth)
+
+float ownerProofPrice = activeOwnerStateFinal == "CURRENT" ? (activeOwnerDir == 1 ? activeOwnerHigh : activeOwnerLow) : activeOwnerIsPreviousAnchor ? (mtfPreviousPrimaryDirRaw == 1 ? mtfPreviousPrimaryHighRaw : mtfPreviousPrimaryLowRaw) : close
+color ownerProofBaseColor = activeOwnerStateFinal == "CURRENT" ? color.green : activeOwnerStateFinal == "PREVIOUS_AFTER_ROLLBACK" ? color.orange : activeOwnerStateFinal == "PREVIOUS" ? color.gray : color.black
+color ownerProofColor = color.new(ownerProofBaseColor, VIS_TRANS_PROOF_LABEL)
+lblOwnerProof := label.new(bar_index, ownerProofPrice, "ПРОФИЛЬ: " + roleProfileProofRu + "\nТФ ГРАФИКА: " + roleDisplayProof + "\nТФ POI: " + rolePoiProof + "\nТФ ОСН.: " + rolePrimaryProof + "\nТФ ПОДТВ.: " + roleConfirmProof + "\nВЛАДЕЛЕЦ: " + activeOwnerStateDisplayRu + "\nВЛАДЕЛЕЦ FIB: " + fibOwnerStateDisplayRu + "\nFIB ВИЗ: " + fibVisualStateDisplayRu + "\nФИКСАЦИЯ ОСН.: " + currentLockStateDisplayRu + "\nСОСТ. POI: " + previousAnchorStateDisplayRu + "\nСЛЕД. ПОДТВ.: " + currentTakeoverRejectDisplayRu + "\nПЕРЕЗАПУСК: " + rearmStateDisplayRu + "\nПРИЧИНА: " + rearmReasonDisplayRu + "\nСЛОМ: " + breakStateDisplayRu, xloc=xloc.bar_index, style=label.style_label_left, color=ownerProofColor, textcolor=color.white)
+
+// 17. TEMPORARY TIMING TRACE DEBUG TABLE - STAGE 7.2-G
+var table traceTimingTable = na
+
+if traceTimingEnabled and na(traceTimingTable)
+    traceTimingTable := table.new(position.bottom_right, 2, 32, border_width=1)
+
+if traceTimingEnabled and barstate.islast and not na(traceTimingTable)
+    color traceBgColor = color.new(color.black, VIS_TRANS_TRACE_BG)
+    color traceTextColor = color.new(color.white, VIS_TRANS_TRACE_TEXT)
+    string protectedSourceDisplayRu = f_ruProtectedSource(mtfCurrentPrimaryProtectedSource)
+    string protectedMissingReasonDisplayRu = f_ruProtectedMissingReason(mtfCurrentPrimaryProtectedMissingReason)
+    table.clear(traceTimingTable, 0, 0, 1, 31)
+    if traceTimingCompact
+        table.cell(traceTimingTable, 0, 0, "ТРАССИРОВКА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 0, "ЭТАП 7.2-N", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 1, "ТФ ГРАФИКА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 1, timeframe.period, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 2, "ВЛАДЕЛЕЦ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 2, activeOwnerStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 3, "ВЛАДЕЛЕЦ FIB", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 3, fibOwnerStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 4, "ФИКСАЦИЯ ОСН.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 4, currentLockStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 5, "СОСТ. POI", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 5, previousAnchorStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 6, "СЛОМ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 6, breakStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 7, "ОСН. СЛОМАН", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 7, f_ruBool(mtfCurrentPrimaryBroken), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 8, "ОТКАТ К POI", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 8, f_ruBool(mtfRollbackToPreviousAnchor), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 9, "POI ВАЛИДЕН", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 9, f_ruBool(previousAnchorActiveValid), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 10, "ОТКАТ РАЗРЕШЁН", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 10, f_ruBool(previousOwnerFallbackAllowed), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 11, "УРОВЕНЬ СЛОМА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 11, str.tostring(mtfCurrentPrimaryBreakLevel), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 12, "РЕЖИМ СЛОМА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 12, breakModeDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 13, "ВРЕМЯ/ЦЕНА СЛОМА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 13, str.tostring(lastActualCurrentBreakTimeCandidate) + " / " + str.tostring(lastActualCurrentBreakPriceCandidate), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 14, "СЛОМ ОТСЛЕЖ.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 14, str.tostring(mtfLastPrimaryBreakTime), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 15, "ЗАЩ. УРОВЕНЬ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 15, str.tostring(mtfCurrentPrimaryProtectedLevel), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 16, "ЗАЩ. ВАЛИДЕН", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 16, f_ruBool(mtfCurrentPrimaryProtectedValid), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 17, "ЗАЩ. ИСТОЧНИК", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 17, protectedSourceDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 18, "ВРЕМ. 0.79", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 18, str.tostring(mtfCurrentPrimaryBreakLevel), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 19, "ПРИЧИНА НЕТ ЗАЩ.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 19, protectedMissingReasonDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 20, "FIB ВИЗ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 20, fibVisualStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+    else
+        table.cell(traceTimingTable, 0, 0, "ТРАССИРОВКА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 0, "ЭТАП 7.2-N", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 1, "ТФ ГРАФИКА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 1, timeframe.period, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 2, "ПРОФИЛЬ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 2, roleProfileProofRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 3, "ТФ POI", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 3, profilePoiTimeframe, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 4, "ТФ ОСН.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 4, profilePrimaryTimeframe, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 5, "ТФ ПОДТВ.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 5, profileConfirmTimeframe, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 6, "ВЛАДЕЛЕЦ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 6, activeOwnerStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 7, "ВЛАДЕЛЕЦ FIB", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 7, fibOwnerStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 8, "ФИКСАЦИЯ ОСН.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 8, currentLockStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 9, "СОСТ. POI", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 9, previousAnchorStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 10, "СЛЕД. ПОДТВ.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 10, currentTakeoverRejectDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 11, "ПЕРЕЗАПУСК", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 11, rearmStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 12, "ПРИЧИНА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 12, rearmReasonDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 13, "СЛОМ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 13, breakStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 14, "ОСН. СЛОМАН", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 14, f_ruBool(mtfCurrentPrimaryBroken), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 15, "ОТКАТ К POI", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 15, f_ruBool(mtfRollbackToPreviousAnchor), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 16, "POI ВАЛИДЕН", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 16, f_ruBool(previousAnchorActiveValid), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 17, "ОТКАТ РАЗРЕШЁН", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 17, f_ruBool(previousOwnerFallbackAllowed), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 18, "СЕК. ТФ ГРАФИКА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 18, str.tostring(chartTimeframeSeconds), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 19, "ОСН. T0/T1", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 19, str.tostring(mtfCurrentPrimaryStartTime) + " / " + str.tostring(mtfCurrentPrimaryProvisionalEndTime), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 20, "ОСН. T2", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 20, str.tostring(mtfCurrentPrimaryConfirmedEndTime), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 21, "ЯКОРЬ T0/T1", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 21, str.tostring(mtfTrackedAnchorStartTime) + " / " + str.tostring(mtfTrackedAnchorConfirmedEndTime), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 22, "ВРЕМЯ/ЦЕНА СЛОМА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 22, str.tostring(lastActualCurrentBreakTimeCandidate) + " / " + str.tostring(lastActualCurrentBreakPriceCandidate), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 23, "СЛОМ ОТСЛЕЖ.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 23, str.tostring(mtfLastPrimaryBreakTime), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 24, "УРОВЕНЬ СЛОМА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 24, str.tostring(mtfCurrentPrimaryBreakLevel), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 25, "РЕЖИМ СЛОМА", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 25, breakModeDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 26, "ЗАЩ. УРОВЕНЬ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 26, str.tostring(mtfCurrentPrimaryProtectedLevel), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 27, "ЗАЩ. ВАЛИДЕН", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 27, f_ruBool(mtfCurrentPrimaryProtectedValid), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 28, "ЗАЩ. ИСТОЧНИК", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 28, protectedSourceDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 29, "ВРЕМ. 0.79", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 29, str.tostring(mtfCurrentPrimaryBreakLevel), text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 30, "ПРИЧИНА НЕТ ЗАЩ.", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 30, protectedMissingReasonDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 0, 31, "FIB ВИЗ", text_color=traceTextColor, bgcolor=traceBgColor)
+        table.cell(traceTimingTable, 1, 31, fibVisualStateDisplayRu, text_color=traceTextColor, bgcolor=traceBgColor)
